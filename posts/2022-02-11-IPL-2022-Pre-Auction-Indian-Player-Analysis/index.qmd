@@ -1,0 +1,339 @@
+---
+title: "IPL 2022 Pre Auction Indian Player Analysis"
+date: "2022-02-11"
+categories: [cricket, data science, r]
+---
+
+```{r setup, echo=FALSE, warnings=FALSE, results="hide", message=FALSE}
+library(yaml)
+library(RMariaDB)
+library(readr)
+library(dplyr)
+library(lubridate)
+library(purrr)
+library(ggplot2)
+library(knitr)
+source("src/load_auction_list.R")
+source("src/map_auction_list_to_db.R")
+
+config <- read_yaml("~/.config/config.yaml")
+
+con <- dbConnect(MariaDB(), host = config$aws$host, port = config$aws$port, user = config$aws$user, password = config$aws$password, dbname = "cricket")
+balls <- dbGetQuery(con, "SELECT * FROM balls_with_features WHERE date >= '2020-04-01' AND date <= '2022-02-11'")
+dbDisconnect(con)
+
+balls <- balls %>%
+  mutate(
+    date = ymd(date),
+    comp = if_else(comp %in% c("T20 International (ODI Nations)", "T20 International (Test Nations)"), "T20 International", comp)
+  ) %>%
+  filter(comp != "T20 International (Other)")
+
+player_auction_tbl <- load_auction_list("player_auction_list.txt")
+player_auction_tbl$name_from_db <- character(nrow(player_auction_tbl))
+
+for (i in 1:nrow(player_auction_tbl)) {
+  player_auction_tbl$name_from_db[i] <- find_player_name_in_db(
+    player_auction_tbl$name[i], 
+    player_auction_tbl$date_of_birth[i]
+  )
+}
+```
+
+```{r, echo=FALSE}
+get_num_matches <- function(player) {
+  balls %>%
+    filter(
+      (striker == player) |
+      (non_striker == player) |
+      (bowler == player)
+    ) %>%
+    pull(matchid) %>%
+    unique %>%
+    length
+}
+
+get_num_inns <- function(player) {
+  balls %>%
+    filter(
+      (striker == player) |
+      (non_striker == player)
+    ) %>%
+    pull(matchid) %>%
+    unique %>%
+    length
+}
+
+indian_batting_stats <- balls %>%
+  filter(striker %in% player_auction_tbl$name_from_db) %>%
+  group_by(striker) %>%
+  summarise(
+    balls_faced = sum(extras_type != "wide"),
+    strike_rate = (sum(runs)/sum(extras_type != "wide"))*100,
+    batting_balls_per_dismissal = sum(!extras_type %in% c("wide", "noball"))/sum(!is.na(dismissal_type) & dismissal_type %in% c("caught", "stumped", "lbw", "bowled", "hit wicket"))
+  )
+
+indian_bowling_stats <- balls %>%
+  group_by(bowler) %>%
+  summarise(
+    is_pace = pace[1],
+    balls_bowled = sum(!extras_type %in% c("wide", "noball")),
+    economy_rate = (sum(runs + if_else(extras_type %in% c("wide", "noball"), extras, 0))/sum(!extras_type %in% c("wide", "noball")))*6,
+    bowling_balls_per_dismissal = sum(!extras_type %in% c("wide", "noball"))/sum(!is.na(dismissal_type) & dismissal_type %in% c("caught", "stumped", "lbw", "bowled", "hit wicket"))
+  )
+
+indian_bowling_pp_stats <- balls %>%
+  filter(powerplay == 1) %>%
+  group_by(bowler) %>%
+  summarise(
+    balls_bowled_pp = sum(!extras_type %in% c("wide", "noball")),
+    economy_rate_pp = (sum(runs + if_else(extras_type %in% c("wide", "noball"), extras, 0))/sum(!extras_type %in% c("wide", "noball")))*6,
+    bowling_balls_per_dismissal_pp = sum(!extras_type %in% c("wide", "noball"))/sum(!is.na(dismissal_type) & dismissal_type %in% c("caught", "stumped", "lbw", "bowled", "hit wicket"))
+  )
+
+indian_bowling_nonpp_stats <- balls %>%
+  filter((balls_remaining <= 30) | (is.na(balls_remaining) & overid >= 15)) %>%
+  group_by(bowler) %>%
+  summarise(
+    balls_bowled_nonpp = sum(!extras_type %in% c("wide", "noball")),
+    economy_rate_nonpp = (sum(runs + if_else(extras_type %in% c("wide", "noball"), extras, 0))/sum(!extras_type %in% c("wide", "noball")))*6,
+    bowling_balls_per_dismissal_nonpp = sum(!extras_type %in% c("wide", "noball"))/sum(!is.na(dismissal_type) & dismissal_type %in% c("caught", "stumped", "lbw", "bowled", "hit wicket"))
+  )
+
+
+player_stats <- player_auction_tbl %>%
+  filter(country == "India") %>%
+  select(name_from_db, specialism) %>%
+  rename(name = name_from_db) %>%
+  mutate(
+    num_matches = map_dbl(name, get_num_matches),
+    num_inns = map_dbl(name, get_num_inns)
+  ) %>%
+  left_join(indian_batting_stats, by = c("name" = "striker")) %>%
+  left_join(indian_bowling_stats, by = c("name" = "bowler")) %>%
+  left_join(indian_bowling_pp_stats, by = c("name" = "bowler")) %>%
+  left_join(indian_bowling_nonpp_stats, by = c("name" = "bowler"))
+```
+
+
+
+The auction for IPL 2022 gets underway on the 12th and 13th of February. Its being termed a "mega" auction as most teams need to pick entirely new squads - they all only have a maximum of 4 players at the moment, and the rest need to be picked in this auction. Therefore, there is lots of talk and debate about which franchises will want which players. With the quantity of players available at auction (590 in total, 370 from India and 220 overseas), some data analysis is useful to diagnose which players are valuable where other franchises might not think so.
+
+In this analysis, I will look at the Indian players that are available. Starting with the homegrown players allows us to see what types of player Indian cricket is stronger/weaker in, and therefore you can choose your overseas players to compensate for these weaknesses. 
+
+Each player in the auction list is given a specialism (batsman, wicketkeeper, all-rounder or bowler), and I will go through the different specialisms one by one and analyse the relevant data for the players with this specialism. All analysis shall be done on post pandemic major T20 competitions data - this means that for the majority of the Indian players available, the only data that I have is the past two years of IPL data. We therefore have to be mindful of some small sample sizes in the results.
+
+First, let's take a look at the batters. Only looking at players who have faced at least 100 balls in the dataset, I plot their balls per dismissal against their strike rate. I also add the league average during this time for top 6 batters.
+
+```{r, echo = FALSE}
+league_strike_rate_ave <- balls %>%
+  filter(comp == "IPL", striker_batting_order <= 6) %>%
+  summarise(strike_rate_ave = (sum(runs) / sum(extras_type != "wide"))*100) %>%
+  pull(strike_rate_ave)
+
+league_balls_per_dismissal_ave <- balls %>%
+  filter(comp == "IPL", striker_batting_order <= 6) %>%
+  summarise(balls_per_dismissal_ave = sum(!extras_type %in% c("wide", "noball"))/sum(!is.na(dismissal_type) & dismissal_type %in% c("caught", "stumped", "lbw", "bowled", "hit wicket"))) %>%
+  pull(balls_per_dismissal_ave)
+
+player_stats %>%
+  filter(specialism == "BATSMAN") %>%
+  filter(balls_faced >= 100) %>%
+  add_row(name = "LEAGUE AVG", strike_rate = league_strike_rate_ave, batting_balls_per_dismissal = league_balls_per_dismissal_ave) %>%
+  ggplot(aes(x = strike_rate, y = batting_balls_per_dismissal, label = name)) +
+  geom_point() +
+  geom_text(hjust = 0, vjust = 0, size=3.5) +
+  scale_x_continuous(limits = c(95, 145), name = "Strike Rate") +
+  scale_y_continuous(limits = c(10, 35), name = "Balls Per Dismissal") +
+  ggtitle(
+    "Balls Per Dismissal against Strike Rate for Batters",
+    "(since Apr 2020, min 100 balls faced)"
+  )
+```
+
+So from this graphic, we can see that Shikhar Dhawan is the best available anchor batsman, with a strike rate similar to the league average but a much better balls per dismissal rate. Other useful anchor batter appear to be Manish Pandey, Shreyas Iyer, Devdutt Padikkal and Saurabh Tiwary, who all have a balls per dismissal rate of at least 25 and a strike rate of at least 120. The only player in this category with a strike rate much higher than the league average is Rahul Tripathi - given that he is the only player in this category this could make him pretty valuable.
+
+Let's move on to the wicketkeepers now. They can be compared with the batters from above, but have the added value of keeping wicket. I won't do any analysis on their actual keeping ability, as this is difficult to get accurate results without detailed data. So for now, let's just look at their batting ability, and this can be compared with the players above. I will again add the league average for top 6 batters.
+
+```{r, echo = FALSE}
+player_stats %>%
+  filter(specialism == "WICKETKEEPER") %>%
+  filter(balls_faced >= 100) %>%
+  add_row(name = "LEAGUE AVG", strike_rate = league_strike_rate_ave, batting_balls_per_dismissal = league_balls_per_dismissal_ave) %>%
+  ggplot(aes(x = strike_rate, y = batting_balls_per_dismissal, label = name)) +
+  geom_point() +
+  geom_text(hjust = 0, vjust = 0, size=3.5) +
+  scale_x_continuous(limits = c(95, 145), name = "Strike Rate") +
+  scale_y_continuous(limits = c(10, 35), name = "Balls Per Dismissal") +
+  ggtitle(
+    "Balls Per Dismissal against Strike Rate for Wicketkeepers",
+    "(since Apr 2020, min 100 balls faced)"
+  )
+```
+
+Ishan Kishan has been talked about as being the most expensive buy of the mega auction, and from his stats it's not difficult to see why; these are better than anyone else's including the specialist batters. Ambati Rayudu also has excellent statistics over the past two years, and expect to see a lot of franchises want him in their middle order despite his age. Whilst he has rarely kept wicket, the fact that he can makes him a useful addition to any squad because he can take the gloves if the first choice keeper is ever unavailable. KS Bharat will also be wanted by teams despite a lower strike rate than the previous two. A final note to add: Dinesh Karthik's stats are a touch misleading - he usually comes into an innings late, and so has to attack immediately without having time to play himself in. A statistical model would allow you to control for this and compare his ability to others' better.
+
+The next category is Indian all-rounders. I've taken a look at the players list, and in my opinion they can all be categorised as either a stronger batter or a stronger bowler. We shall therefore compare the two categories separately. First let's look at those who are stronger batters. We will look at both their batting and bowling abilities this time - we will compare their batting strike rate with their balls per dismissal to assess their batting ability like before, but we will also look at their bowling economy rate, bowling balls per dismissal and the average number of balls they bowl per game.
+
+```{r, echo = FALSE}
+batting_all_rounder_stats <- player_stats %>%
+  filter(specialism == "ALL-ROUNDER") %>%
+  filter(balls_faced >= 100) %>%
+  filter(name %in% c("V Shankar", "S Dube", "MK Lomror", "N Rana", "M Shahrukh Khan", "DJ Hooda", "Abhishek Sharma", "R Parag", "KM Jadhav", "SN Khan"))
+
+batting_all_rounder_stats %>%
+  add_row(name = "LEAGUE AVG", strike_rate = league_strike_rate_ave, batting_balls_per_dismissal = league_balls_per_dismissal_ave) %>%
+  ggplot(aes(x = strike_rate, y = batting_balls_per_dismissal, label = name)) +
+  geom_point() +
+  geom_text(hjust = 0, vjust = 0, size=3.5) +
+  scale_x_continuous(limits = c(95, 145), name = "Strike Rate") +
+  scale_y_continuous(limits = c(10, 35), name = "Balls Per Dismissal") +
+  ggtitle(
+    "Balls Per Dismissal against Strike Rate for Batting All-Rounders",
+    "(since April 2020, min 100 balls faced)"
+  )
+
+
+batting_all_rounder_stats %>%
+  mutate(balls_per_match = balls_bowled / num_matches) %>%
+  select(name, num_matches, balls_bowled, balls_per_match, economy_rate, bowling_balls_per_dismissal) %>%
+  rename(
+    "Name" = name,
+    "Matches" = num_matches,
+    "Balls Bowled" = balls_bowled,
+    "Avg Balls Per Match" = balls_per_match,
+    "Economy Rate" = economy_rate,
+    "Balls Per Dismissal" = bowling_balls_per_dismissal
+  ) %>%
+  kable(digits = 1, caption = "Bowling Statistics for Batting All-Rounders")
+```
+
+If we look at the table of bowling statistics, we can see that a lot of these all-rounders are not... all-rounders. We don't have any bowling data for Shahrukh Khan or Kedhar Jadhav, and not much for Nitish Rana or Riyan Parag either. These players should be evaluated on their batting alone.
+
+Deepak Hooda and Shahrukh Khan both represent good aggressive Indian batters, and Hooda averages one over a game with his off spin too. Abhishek Sharma has a high-ish strike rate and bowls a lot too, which makes him valuable. Rana is an average batsman judging from the data - whilst this doesn't make him sound great he will be sought after because there's a lot that are worse than him. Shivam Dube and Mahipal Lomror are both okay if they can come cheap and play as your 6th batter/6th bowler.
+
+Lets now look at the all-rounders that I have classified as being stronger bowlers. To begin with, lets just look at their batting statistics.
+
+```{r, echo=FALSE}
+player_stats %>%
+  filter(specialism %in% "ALL-ROUNDER") %>%
+  filter(balls_bowled >= 100) %>%
+  filter(!name %in% c("V Shankar", "S Dube", "MK Lomror", "N Rana", "M Shahrukh Khan", "DJ Hooda", "Abhishek Sharma", "R Parag", "KM Jadhav", "SN Khan")) %>%
+  select(name, num_matches, num_inns, balls_faced, strike_rate, batting_balls_per_dismissal) %>%
+  rename(
+    "Name" = name,
+    "Matches" = num_matches,
+    "Inns" = num_inns,
+    "Balls Faced" = balls_faced,
+    "Strike Rate" = strike_rate,
+    "Balls Per Dismissal" = batting_balls_per_dismissal
+  ) %>%
+  kable(digits=1, caption = "Batting Statistics for Bowling All-Rounders")
+```
+
+Many of these players have nothing to suggest that their batting could be useful. Rahul Tewatia has the best batting stats, Krunal Pandya's stats suggest that he could be useful, and Harshal Patel can hit a few boundaries later on in the innings. Jayant Yadav has a good strike rate but from a very small sample size and Harpreet Brar has never been out in his 58 balls faced. As for the rest - in my opinion their batting abilties' shouldn't be taken into account and they should be judged on their bowling alone. Some of them like Ravi Ashwin may be able to stick around, but if they are coming in at 8 or lower then this is of very little use to the team.
+
+I will look at their bowling abilities' now, and I will combine this with the specialist bowlers. I will do the analysis for pace and spin bowlers separately. Lets look at spinners first. We again include a league average for spinners over this period.
+
+
+```{r, echo=FALSE}
+league_strike_rate_ave <- balls %>%
+  filter(comp == "IPL", pace == 0) %>%
+  summarise(strike_rate_ave = (sum(runs + ifelse(extras_type %in% c("wide", "noball"), extras, 0)) / sum(!extras_type %in% c("wide", "noball")))*6) %>%
+  pull(strike_rate_ave)
+
+league_balls_per_dismissal_ave <- balls %>%
+  filter(comp == "IPL", pace == 0) %>%
+  summarise(balls_per_dismissal_ave = sum(!extras_type %in% c("wide", "noball"))/sum(!is.na(dismissal_type) & dismissal_type %in% c("caught", "stumped", "lbw", "bowled", "hit wicket"))) %>%
+  pull(balls_per_dismissal_ave)
+
+player_stats %>%
+  filter(specialism %in% c("BOWLER", "ALL-ROUNDER") , is_pace == 0) %>%
+  filter(!name %in%  c("V Shankar", "S Dube", "MK Lomror", "N Rana", "M Shahrukh Khan", "DJ Hooda", "Abhishek Sharma", "R Parag", "KM Jadhav", "SN Khan")) %>%
+  filter(balls_bowled >= 100) %>%
+  add_row(name = "LEAGUE AVE", economy_rate = league_strike_rate_ave, bowling_balls_per_dismissal = league_balls_per_dismissal_ave) %>%
+  ggplot(aes(x = economy_rate, y = bowling_balls_per_dismissal, label = name)) +
+  geom_point() +
+  geom_text(hjust = 0, vjust = 0, size=3.5) +
+  scale_x_continuous(limits = c(6, 10), name = "Economy Rate") +
+  scale_y_continuous(name="Balls Per Dismissal") +
+  ggtitle(
+    "Balls Per Dismissal against Economy Rate for Spinners",
+    "(since April 2020, min 100 balls bowled)"
+  )
+```
+
+From this graph I can see Harpreet Brar and Washington Sundar as two good defensive spinners. I can also see two good aggressive spinners in Yuzvendra Chahal and Amit Mishra. Rahul Chahar and Murugan Ashwin are not too far from these two, whilst the more well known Ashwin is a good pick for an all round spinner in terms of wicket taking and economy rate. Rahul Tewatia, Krunal Pandya and Jayant Yadav are also valuable players given their batting abilities, but you wouldn't like them to be the team's main spinner. That's ten Indian spinners that I have listed as good picks - along with the four Indian spinners that already have a team for the 2022 IPL this shows the strength in depth that India have in this department, and therefore an overseas spinner has to be elite in order to pick up a contract.
+
+The final section of players that we will take a look at are pace bowlers. Upon exploring the data, I think it is best to look at and compare them in two main phases of the game that they operate: the powerplay and the death. Be mindful that the axis are different on both of these graphs below. I will include league averages for pace bowlers in both phases of the game as benchmarks.
+
+```{r, echo=FALSE}
+league_strike_rate_ave <- balls %>%
+  filter(comp == "IPL", pace == 1, powerplay == 1) %>%
+  summarise(strike_rate_ave = (sum(runs + ifelse(extras_type %in% c("wide", "noball"), extras, 0)) / sum(!extras_type %in% c("wide", "noball")))*6) %>%
+  pull(strike_rate_ave)
+
+league_balls_per_dismissal_ave <- balls %>%
+  filter(comp == "IPL", pace == 1, powerplay == 1) %>%
+  summarise(balls_per_dismissal_ave = sum(!extras_type %in% c("wide", "noball"))/sum(!is.na(dismissal_type) & dismissal_type %in% c("caught", "stumped", "lbw", "bowled", "hit wicket"))) %>%
+  pull(balls_per_dismissal_ave)
+
+player_stats %>%
+  filter(specialism %in% c("BOWLER", "ALL-ROUNDER"), is_pace == 1) %>%
+  filter(balls_bowled_pp >= 100) %>%
+  filter(!name %in%  c("V Shankar", "S Dube", "MK Lomror", "N Rana", "M Shahrukh Khan", "DJ Hooda", "Abhishek Sharma", "R Parag", "KM Jadhav", "SN Khan")) %>%
+  add_row(name = "LEAGUE AVE", economy_rate_pp = league_strike_rate_ave, bowling_balls_per_dismissal_pp = league_balls_per_dismissal_ave) %>%
+  ggplot(aes(x = economy_rate_pp, y = bowling_balls_per_dismissal_pp, label = name)) +
+  geom_point() +
+  geom_text(hjust = 0, vjust = 0, size=3.5) +
+  scale_x_continuous(limits=c(5.8, 10.1), name = "Economy Rate") +
+  scale_y_continuous(name="Balls Per Dismissal") +
+  ggtitle(
+    "Balls Per Dismissal against Economy Rate for Seamers in the Powerplay",
+    "(since April 2020, min 100 balls bowled)"
+  )
+```
+
+```{r, echo=FALSE}
+league_strike_rate_ave <- balls %>%
+  filter(comp == "IPL", pace == 1, ((balls_remaining <= 30) | (is.na(balls_remaining) & overid >= 15))) %>%
+  summarise(strike_rate_ave = (sum(runs + ifelse(extras_type %in% c("wide", "noball"), extras, 0)) / sum(!extras_type %in% c("wide", "noball")))*6) %>%
+  pull(strike_rate_ave)
+
+league_balls_per_dismissal_ave <- balls %>%
+  filter(comp == "IPL", pace == 1, ((balls_remaining <= 30) | (is.na(balls_remaining) & overid >= 15))) %>%
+  summarise(balls_per_dismissal_ave = sum(!extras_type %in% c("wide", "noball"))/sum(!is.na(dismissal_type) & dismissal_type %in% c("caught", "stumped", "lbw", "bowled", "hit wicket"))) %>%
+  pull(balls_per_dismissal_ave)
+
+player_stats %>%
+  filter(specialism %in% c("BOWLER", "ALL-ROUNDER"), is_pace == 1) %>%
+  filter(balls_bowled_nonpp >= 100) %>%
+  filter(!name %in%  c("V Shankar", "S Dube", "MK Lomror", "N Rana", "M Shahrukh Khan", "DJ Hooda", "Abhishek Sharma", "R Parag", "KM Jadhav", "SN Khan")) %>%
+  add_row(name = "LEAGUE AVE", economy_rate_nonpp = league_strike_rate_ave, bowling_balls_per_dismissal_nonpp = league_balls_per_dismissal_ave) %>%
+  ggplot(aes(x = economy_rate_nonpp, y = bowling_balls_per_dismissal_nonpp, label = name)) +
+  geom_point() +
+  geom_text(hjust = 0, vjust = 0, size=3.5) +
+  scale_x_continuous(limits=c(7.9, 11), name = "Economy Rate") +
+  scale_y_continuous(name="Balls Per Dismissal") +
+  ggtitle(
+    "Balls Per Dismissal against Economy Rate for Seamers at the Death",
+    "(since April 2020, min 100 balls bowled)"
+  )
+```
+
+Looking at the graph for the powerplay data, the only two players with better than average values for both economy rate and balls per dismissal are Avesh Khan and Shivam Mavi. Bhuvneshwar Kumar leads the way in terms of economy rate and is the only player to go at better than a run a ball in this period, with Sandeep Sharma, T Natarajan and Mohammed Shami all going at better than 7s. Whilst Shardul Thakur goes at 9 runs per over in this phase of the game, he does have the best balls per dismissal rate.
+
+As for the death overs, the most important metric here is economy rate because wickets are not as important compared to earlier in the game. Deepak Chahar leads the way with a very impressive economy rate of less than 8, about 2 runs better than the league average. This is actually not what I expected - Deepak Chahar is renowned to be a bit of a powerplay specialist with the ball, yet over the past two years the data shows that he has been better at the death. Avesh Khan is the only player with an economy rate of less than 9, whilst Harshal Patel and T Natarajan are both better than the league average in both of the measures.
+
+That completes the final category of Indian players to look at in the auction pool. Judging by the analysis above, there are a few valuable picks for each category. Whilst these are very basic statistics and so need to be taken with a pinch of salt, it is an easy starting point and appears to be a good one since a lot of the graphs and results align with our prior knowledge of the players.
+
+In summary, my list of data driven picks from the Indian contingent are as follows:
+
+* **Anchor batters:** Shikhar Dhawan
+* **Aggressive batters:** Ishan Kishan, Ambati Rayudu, Rahul Tripathi, Deepak Hooda, Shahrukh Khan
+* **Batting all-rounders:** Abhishek Sharma
+* **Spin bowling all-rounders:** Krunal Pandya, Rahul Tewatia, Jayant Yadav
+* **Aggressive spin bowlers:** Yuzrendra Chahal, Amit Mishra
+* **Defensive spin bowlers:** Harpreet Brar, Washington Sundar
+* **Powerplay pace bowlers:** Avesh Khan, Shivam Mavi, Bhuvneshwar Kumar
+* **Death pace bowlers:** Avesh Khan, Deepak Chahar, Harshal Patel, T Natarajan

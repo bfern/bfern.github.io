@@ -1,0 +1,439 @@
+---
+title: "A Statistical Analysis of Jimmy Andersons Test Batting Career in R"
+date: "2021-11-18"
+categories: [cricket, data science, r]
+---
+
+```{r setup, message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(rstan)
+library(lubridate)
+
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+
+batting <- readRDS("data/batting.rds")
+```
+
+# Introduction
+
+James (Jimmy) Anderson is well known as one of the best ever pace bowlers to have played the game. His record speaks for itself - the most ever caps for an English test cricketer, the most ever wickets for a fast bowler in the history of test cricket, the only player to take 1000 first class wickets in the 21st century. Whilst he is known for his bowling achievements, in this article I will take a look at his batting throughout his test career.
+
+His test career spans over 18 years, making his debut in May 2003 and still playing as of current (July 2021). For the duration of his career, it's fair to say that batting has not been his strong point - he has usually been found at number 11 in the order. That's not to say he's an awful batsman, we've seen far worse batsmen during his career; when he and Monty Panesar were playing in the same team he would usually be given a promotion up to number 10. And despite the plethora of bowling records, he has a few batting records to go with it: he has the 5th most innings in test cricket before a duck, and he has the 3rd highest score by a number 11.
+
+This article will be quite technical. I will be using the R programming language throughout, initially to perform some exploratory data analysis, and then later to create and compare mathematical models. These models are necessary so that we can understand how his batting has changed over time.
+
+# Exploratory Data Analysis
+
+Firstly let's take a glimpse at the data that we have.
+
+```{r preview data}
+batting %>% head(10)
+```
+
+So we can see that we have the innings number, the date, the score and whether or not he was dismissed for each innings in test cricket that Jimmy Anderson has played.
+
+To begin our analysis let's plot the distribution of Jimmy's batting scores.
+
+```{r bar chart jimmy scores}
+batting %>%
+  ggplot(aes(x = score, fill = dismissed)) +
+  geom_bar() +
+  scale_fill_discrete(name = "Dismissed?") +
+  scale_x_continuous(name = "Score") +
+  scale_y_continuous(name = "Count")
+```
+
+So despite not scoring a single duck (that is zero runs and out) in his first 54 innings, it is now his highest score when he is out. The scores look to follow a fairly geometric shape - this seems reasonable because you can think of a player having a constant probability of being dismissed before they score another run. Obviously this assumption does have some issues - you can see that Jimmy has been out for a score of 4 more often than a score of 3, and this is because scoring 4 runs through a single shot is quite common.
+
+We are interested in how his batting has changed over time, so let's plot his batting scores against the innings number.
+
+```{r runs by innings plot}
+batting %>%
+  ggplot(aes(x = innings_no, y = score, col = dismissed)) +
+  geom_point() +
+  scale_y_continuous(breaks = seq(0, 90, by = 10), minor_breaks = NULL, name = "Score") +
+  scale_x_continuous(name = "Innings Number") +
+  scale_color_discrete(name = "Dismissed?")
+```
+
+We can see that magnificent 81 at Trent Bridge in 2014 he scored standing out about half way through his career.
+
+Colloquially, it is said that Jimmy's batting has deteriorated over time. [This excellent video](https://www.youtube.com/watch?v=p6aCJH2XhCo&ab_channel=JarrodKimber) by Jarrod Kimber explains how his batting, particularly against pace bowlers, has deteriorated as he has got older (and how he now only has one scoring shot which is the reverse sweep). The graph above supports that this is the case - just look at the number of times he passes 10 and larger scores in the first half of his career compared to more recently.
+
+Whilst this graph has a lot of data points and therefore has a lot of variance meaning it can be difficult to see any patterns, lets cluster the data to see if that adds clarity. Lets start by looking at his batting average by year.
+
+```{r batting average by year}
+batting %>%
+  group_by(year = year(date)) %>%
+  summarise(
+    ave = sum(score) / sum(dismissed)
+  ) %>%
+  ggplot(aes(x = year, y = ave)) +
+  geom_point() +
+  scale_x_continuous(name = "Year") +
+  scale_y_continuous(name = "Batting Average")
+```
+Whilst at first it might not again be initially obvious that there is clear pattern, we can see that Jimmy Anderson has averaged over 10 in 6 of his 18 calendar years (he didn't play a game in 2005) as a professional cricketer, and the most recent of these was in 2014. So he hasn't averaged over 10 in any of the past 7 years, but he averaged more than 10 in 4 of his first 7 years.
+
+Let's look into this further by calculating the rolling batting average for Anderson, where we take the nearest 25 innings either side to calculate this.
+
+```{r moving batting average}
+block_size <- 25
+moving_batting_ave_df <- tibble(
+  innings_no = numeric(),
+  ave = numeric()
+)
+for (i in (block_size + 1):(nrow(batting) - block_size)) {
+  moving_batting_ave <- batting %>%
+    filter(
+      innings_no >= i - block_size,
+      innings_no <= i + block_size
+    ) %>%
+    summarise(ave = sum(score) / sum(dismissed)) %>%
+    pull(ave)
+  moving_batting_ave_df <- moving_batting_ave_df %>%
+    add_row(
+      innings_no = i,
+      ave = moving_batting_ave
+    )
+}
+moving_batting_ave_df %>%
+  ggplot(aes(x = innings_no, y = ave)) +
+  geom_point() +
+  scale_x_continuous(name = "Innings Number") +
+  scale_y_continuous(name = "Moving Batting Average")
+```
+
+We can see that Jimmy Anderson's moving batting average has decreased quite a bit from when he started, from ~15 when he began his career to ~6 currently. We can see that this has mostly followed a decreasing shape for his whole career - the only exception being a slight increase in the mid part of his career, which was mostly fuelled by that 81 he scored.
+
+# Mathematics
+
+In order to provide an in depth analysis of Jimmy's batting over time, I think it is necessary to construct a model of his batting performance over time. I will make a fairly simple model by assuming that the runs scored comes from a geometric distribution. As I have previously said, we have to make the following two assumptions:
+
+(i) If you are not dismissed before scoring another run then you score one extra run.
+(ii) The probability of being dismissed before scoring another run is constant, for a given time $t$.
+
+It is clear that assumption (i) is false and the data is not generated this way because of the rules of cricket, and therefore a more sophisticated model would take this into account and model the underlying process more carefully. The second assumption is also probably false - batting in cricket becomes a lot easier after you have faced a number of deliveries because you have got more used to the bowlers and the conditions.
+
+We also have to deal with times where he is not dismissed. We can think of these times as a censored observation - the innings ended and therefore we don't know what score he would have ended up on, but we know he would have scored at least the score that he was on at the time.
+
+So mathematically speaking, we will design out model as follows:
+
+$$
+\alpha_{i} \sim Geom(\theta_{t[i]}) \\
+score_{i} = 
+\begin{cases}
+\alpha_{i}, \text{if dismissed}, \\
+\{0, \dots, \alpha_{i}\}, \text{if not dismissed}
+\end{cases}
+$$
+
+# Modelling
+
+To start off with our model, I will define some cut off points for our training set (and also the warm up for the exponential weighted model below):
+
+```{r train test split}
+warm_up_cut_off_year <- 2009
+train_cut_off_year <- 2016
+```
+
+## Exponential Weighted Moving Average
+
+The first model that I will construct will be an exponential weighted moving mean. I will take each timestep as an individual innings, and optimize the weight such that the log likelihood is maximised. I do this in a slightly weird way where I recalculate the weighting parameter for each new observation in the test set - the reason I do this becomes clearer once I describe the state space model below.
+
+```{r model by innings number}
+source("src/exponential_weighted_moving_average.R")
+
+warm_up_cut_off_year <- 2009
+train_cut_off_year <- 2016
+
+warm_up_cut_off <- batting %>%
+  filter(year(date) <= warm_up_cut_off_year) %>%
+  nrow
+
+train_cut_off <- batting %>%
+  filter(year(date) <= train_cut_off_year) %>%
+  nrow
+
+weights <- numeric(nrow(batting))
+for (i in (train_cut_off+1):nrow(batting)) {
+  train <- batting %>%
+    filter(innings_no < i)
+  weights[i] <- get_optimal_weight(
+    warm_up_cut_off,
+    train$innings_no,
+    train$score,
+    !train$dismissed
+  )
+}
+
+print(paste0("The optimal weight is: ", weights[nrow(batting)]))
+```
+
+We can now use our calculated weights for each time point to calculate our predicted parameters for the test set, which we will then plot:
+
+```{r parameter plot by innings number}
+params_by_timestep <- numeric(nrow(batting))
+for (i in (train_cut_off+1):nrow(batting)) {
+  params_by_timestep[i] <- get_params_by_timestep(
+    weights[i],
+    warm_up_cut_off = warm_up_cut_off,
+    timestep_vec = batting$innings_no,
+    score_vec = batting$score,
+    not_out_vec = !batting$dismissed
+  )[i]
+}
+
+weighted_moving_ave_preds_by_innings_df <- tibble(
+  innings_no  = 1:max(batting$innings_no),
+  param = params_by_timestep
+) %>%
+  filter(innings_no > train_cut_off)
+
+weighted_moving_ave_preds_by_innings_df %>%
+  ggplot(aes(x = innings_no, y = param)) +
+  geom_point() +
+  scale_x_continuous(name = "Innings Number") +
+  scale_y_continuous(name = "Parameter")
+```
+
+I will now construct a model in the same way as above, but instead of taking each timestep as an individual innings, I will only take the timesteps as individual years.
+
+```{r model by year}
+weights <- numeric(max(year(batting$date)))
+for (i in (train_cut_off_year+1):max(year(batting$date))) {
+  train <- batting %>%
+    filter(year(date) < i)
+  weights[i] <- get_optimal_weight(
+    warm_up_cut_off_year,
+    year(train$date),
+    train$score,
+    !train$dismissed
+  )
+}
+
+print(paste0("The optimal weight is: ", weights[i]))
+```
+
+And lets again calculate our predicted parameters for the test set:
+
+```{r parameter plot by year}
+params_by_timestep <- numeric(nrow(batting))
+for (i in (train_cut_off_year+1):max(year(batting$date))) {
+  params_by_timestep[i] <- get_params_by_timestep(
+    weights[i],
+    warm_up_cut_off = warm_up_cut_off_year,
+    timestep_vec = year(batting$date),
+    score_vec = batting$score,
+    not_out_vec = !batting$dismissed
+  )[i]
+}
+
+weighted_moving_ave_preds_by_year_df <- tibble(
+  year  = 1:max(year(batting$date)),
+  param = params_by_timestep
+) %>%
+  filter(year > train_cut_off_year) 
+
+weighted_moving_ave_preds_by_year_df %>%
+  ggplot(aes(x = year, y = param)) +
+  geom_point() +
+  scale_x_continuous(name = "Year") +
+  scale_y_continuous(name = "Parameter")
+```
+
+## State Space Model
+
+I will now construct a different type of time series model, called a state space model. We will let the parameter of the geometric distribution be the state, and then let this value evolve over time. We will let the state evolve through the equation $\theta_{t+1} \sim \mathcal{N(\theta_{t}, \sigma)}$.
+
+I have written this model in a language called [Stan](https://mc-stan.org/), a probabilistic programming language for statistical inference. I display the model below.
+
+```{r stan code state space model}
+writeLines(readLines("stan_models/model.stan"))
+```
+
+Now, it can be difficult to fit a state space model with too many parameters, so I will only run this model where each timestep is a year. Below I load in the model and do statistical inference.
+
+```{r sampling}
+model <- stan_model("stan_models/model.stan")
+
+train <- batting %>%
+  filter(year(date) <= train_cut_off_year)
+
+standata <- list(
+  num_outs = sum(train$dismissed),
+  num_not_outs = sum(!train$dismissed),
+  ntimesteps = max(year(train$date)) - 2002,
+  timestep_out = year(train$date[train$dismissed]) - 2002,
+  timestep_not_out = year(train$date[!train$dismissed]) - 2002,
+  score_out = train$score[train$dismissed],
+  score_not_out = train$score[!train$dismissed]
+)
+
+fit <- sampling(model, standata, seed = 1, iter = 10000, control = list(adapt_delta = 0.995))
+```
+
+The first thing to do after MCMC is to check the fit. Let's start by printing the output of the fit.
+
+```{r print fit}
+print(fit)
+```
+So the `Rhat` value is 1 for everything, which should mean that the chains are well mixed. We can see that the effective sample size is lowest for the `sigma` parameter. Let's take a look at the traceplot for this and a few other parameters, just to check that the model has fit okay.
+
+```{r traceplot sigma}
+traceplot(fit, "sigma")
+```
+
+```{r traceplot initial param}
+traceplot(fit, "initial_param")
+```
+
+
+```{r traceplot unscaled param}
+traceplot(fit, "unscaled_param[1]")
+```
+
+
+The traceplot for all these parameters look good and the chains are well mixed. Therefore we can conclude that our chains have probably converged.
+
+We now want to calculate our predicted parameters for each year. To do this, we need to retrain the model for each year with the updated dataset (a technique called filtering is often used to do this instead of retraining the model).
+
+```{r refitting stan model for each extra year of data}
+fits <- list()
+for (i in (train_cut_off_year+1):max(year(batting$date))) {
+  train <- batting %>%
+    filter(year(date) < i)
+  standata <- list(
+    num_outs = sum(train$dismissed),
+    num_not_outs = sum(!train$dismissed),
+    ntimesteps = max(year(train$date)) - 2002,
+    timestep_out = year(train$date[train$dismissed]) - 2002,
+    timestep_not_out = year(train$date[!train$dismissed]) - 2002,
+    score_out = train$score[train$dismissed],
+    score_not_out = train$score[!train$dismissed]
+  )
+  fits[[as.character(i)]] <- sampling(
+    model,
+    standata,
+    seed = 1,
+    iter = 10000,
+    control = list(adapt_delta = 0.995),
+    open_progress = FALSE,
+    show_messages = FALSE,
+    refresh = -1
+  )
+}
+```
+
+Since we have refitted the models on each extra bit of training data, we now have our predicted parameters. Lets plot them to see what they look like.
+
+```{r parameter plot}
+params_by_timestep <- numeric(nrow(batting))
+for (i in (train_cut_off_year+1):max(year(batting$date))) {
+  params_by_timestep[i] <- extract(fits[[as.character(i)]])[["transformed_param"]][,i-2003] %>% mean
+}
+
+state_space_preds_df <- tibble(
+  year  = 1:max(year(batting$date)),
+  param = params_by_timestep
+) %>%
+  filter(year > train_cut_off_year)
+
+state_space_preds_df %>%
+  ggplot(aes(x = year, y = param)) +
+  geom_point() +
+  scale_x_continuous(name = "Year") +
+  scale_y_continuous(name = "Parameter")
+```
+
+# Model Comparison
+
+Now that I have predicted parameters from all the models, I can calculate their log loss scores and compare them.
+
+```{r}
+test <- batting %>%
+  filter(year(date) > train_cut_off_year)
+
+weighted_mov_ave_preds_by_innings <- numeric(nrow(test))
+weighted_mov_ave_preds_by_year <- numeric(nrow(test))
+state_space_preds <- numeric(nrow(test))
+
+for (i in 1:nrow(test)) {
+  weighted_mov_ave_preds_by_innings[i] <- weighted_moving_ave_preds_by_innings_df %>%
+    filter(innings_no == test$innings_no[i]) %>%
+    pull(param)
+  weighted_mov_ave_preds_by_year[i] <- weighted_moving_ave_preds_by_year_df %>%
+    filter(year == year(test$date[i])) %>%
+    pull(param)
+  state_space_preds[i] <- state_space_preds_df %>%
+    filter(year == year(test$date[i])) %>%
+    pull(param)
+}
+
+print(get_neg_log_lik(weighted_mov_ave_preds_by_innings, test$score, !test$dismissed))
+print(get_neg_log_lik(weighted_mov_ave_preds_by_year, test$score, !test$dismissed))
+print(get_neg_log_lik(state_space_preds, test$score, !test$dismissed))
+```
+So we can see that the state space model gives us the best predictions on this test set.
+
+# Future Work
+
+A few improvements that could be done for this model in the future:
+
+* Address assumption (i) - a possible way of doing this is to model the number of balls faced as an intermediate step, and then runs scored from this.
+* Address assumption (ii) by assuming that the probability of being dismissed changes as his innings progresses.
+* Include other key factors such as the strength of the opposition and the match conditions.
+
+# Conclusion
+
+Lets take our best model and look at what it says about Jimmy Anderson's batting strength over time:
+
+```{r jimmy expected average over time}
+standata <- list(
+  num_outs = sum(batting$dismissed),
+  num_not_outs = sum(!batting$dismissed),
+  ntimesteps = max(year(batting$date)) - 2002,
+  timestep_out = year(batting$date[batting$dismissed]) - 2002,
+  timestep_not_out = year(batting$date[!batting$dismissed]) - 2002,
+  score_out = batting$score[batting$dismissed],
+  score_not_out = batting$score[!batting$dismissed]
+)
+
+fit <- sampling(
+  model,
+  standata,
+  seed = 1,
+  iter = 10000,
+  control = list(adapt_delta = 0.995),
+  open_progress = FALSE,
+  show_messages = FALSE,
+  refresh = -1
+)
+
+params_by_timestep <- numeric(nrow(batting)+1)
+model_params <- extract(fit)
+for (i in 2004:2022) {
+  params_by_timestep[i] <- mean(model_params[["transformed_param"]][,i-2003])
+}
+
+state_space_preds_df <- tibble(
+  year  = 1:(max(year(batting$date))+1),
+  param = params_by_timestep
+) %>%
+  filter(year > 2003) %>%
+  mutate(exp_ave = (1 - param) / param)
+
+state_space_preds_df %>%
+  ggplot(aes(x = year, y = exp_ave)) +
+  geom_point() +
+  scale_x_continuous(name = "Year") +
+  scale_y_continuous(name = "Parameter", limits = c(7, 12))
+```
+
+In conclusion, the two things that stand out to me are:
+
+* It seems to show that from 2010 Jimmy's batting got a lot worse - it would be interesting to know what caused quite a large and sudden change.
+* His batting has undergone a steady decline towards the back end of his career, as is often said by commentators and pundits.
+
