@@ -1,5 +1,5 @@
 ---
-title: "bfern"
+title: "Bradley Fern"
 listing:
   contents: posts
   sort: "date desc"
