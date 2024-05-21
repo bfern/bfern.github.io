@@ -1,6 +1,19 @@
 ---
 title: "About"
 image: profile.jpeg
+website:
+  title: "Bradley Fern"
+  navbar:
+    right:
+      - about.qmd
+      - text: Blog
+        href: index.qmd
+      - icon: twitter
+        href: https://twitter.com/bradfern_
+      - icon: linkedin
+        href: https://www.linkedin.com/in/bradley-fern-a10a6bab/
+      - icon: github
+        href: https://github.com/bfern
 about:
   template: jolla
   links:
