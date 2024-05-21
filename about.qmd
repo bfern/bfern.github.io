@@ -1,0 +1,23 @@
+---
+title: "About"
+image: profile.jpeg
+about:
+  template: jolla
+  links:
+    - icon: twitter
+      text: Twitter
+      href: https://twitter.com/bradfern_
+    - icon: linkedin
+      text: LinkedIn
+      href: https://www.linkedin.com/in/bradley-fern-a10a6bab/
+    - icon: github
+      text: Github
+      href: https://github.com/bfern
+
+---
+
+I am a Data Scientist who has worked in a variety of roles across the sports betting, voluntary and e-commerce sectors. This is a technical blog writing about all things data science (currently they're mostly about cricket though). To find out more about me, check out my first blog post or feel free to get in touch!
+
+### Contact me
+
+
