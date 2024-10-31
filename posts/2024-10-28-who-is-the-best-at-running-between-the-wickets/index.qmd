@@ -60,3 +60,5 @@ What about those who do a lot worse than expected
 Given our analysis, can we say how many extra runs X contributes to Y? On average, these are the number of non boundary deliveries that each position is in for (so including both on strike and at the bowlers end) during a T20 match:
 
 So if we were choosing between X and Y for position Z in the team, X is expected to contribute W extra runs to the team score because of his running ability.
+
+Whilst we have quantified the number of runs that each batter will directly contribute through their running ability, there are also indirect effects of running ability that haven't been quantified: a batter can feel pressure if they are struggling to rotate the strike leading to them and potentially their partner too being more likely to lose their wicket on a future delivery. Also from my experience of watching cricket, a team are more likely to be let down if one batter is slow rather than being  being benefitted from one batter being fast - the time it takes to complete a run will only be as quick as the slowest of the two runners.
