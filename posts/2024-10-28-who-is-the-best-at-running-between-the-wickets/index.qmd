@@ -1,17 +1,18 @@
 ---
 title: Who is the best at running between the wickets?
-date: "2024-10-28"
+date: "2024-11-13"
 categories: [cricket, data science, r, visualisation]
 ---
 
 Note to self: see ~/Downloads/rough.R for code that I have written so far.
 
-Over the past few months, I've taken an interest in baseball analytics because there is so much cricket can learn from what has been done there. I've learn that base running is a large component of the game, which struck me as odd since running between the wickets is neglected in cricket. But should it be? In this post, I will quantify the effect that a strong runner between the wickets has upon the team.
+Over the past few months, I've taken an interest in baseball analytics because there is so much cricket can learn from what has been done there. I've learnt that base running is a large component of the game, which struck me as odd since running between the wickets is neglected in cricket. But should it be? In this post, I will quantify the effect that a strong runner between the wickets has upon the team.
 
 To do this, I am going to use wagonwheel data of where a batter hits the ball and how many runs they end up scoring. I will then build a model that predicts the number of runs they are expected to score, and we can then compare these predictions to the actual runs scored for different batters.
 
 Firstly, lets take a look at the dataset that I am using. I am using ball by ball data that has been put together by [Himanish Ganjoo](https://twitter.com/hganjoo_153). The dataset that I am using has been filtered so that it contains only the following:
-* T20 Blast and The Hundred from 2015 to 2024.
+
+* T20 Blast from 2015 to 2024 (to limit the size of the dataset but still have plenty of data for each player)
 * Matches played at the 18 major England and Wales stadiums (because some of the outgrounds that get used can have unusual dimensions)
 * Balls from outside the powerplay (because this causes the distribution of runs to vary significantly)
 * Balls that did not go for a boundary
