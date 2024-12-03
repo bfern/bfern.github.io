@@ -18,8 +18,9 @@ Firstly, lets take a look at the dataset that I am using. I am using ball by bal
 * Balls that did not go for a boundary
 * Balls with wagonwheel data (I'm assuming that these are only deliveries where the batter hit the ball)
 
-## run script that does data manipulation, call it data_manipulation.R
-
+```{r}
+source("data.R")
+```
 Lets take a look at this wagonwheel data, using different colours to denote the number of runs ran.
 
 ## plot wagonwheel data with colours of runs ran
@@ -33,13 +34,52 @@ Lets now think about building the model. I should include the following variable
 * bat_hand (this also helps gives a proxy of what the field is like)
 * innings_balls_remaining (towards the later stages of a game, batters will take more risks)
 
-To demonstrate the affect of the ground variable, below is a plot of the proportion of twos scored against the proportion of boundaries scored for the 18 first class grounds for all T20 blast deliveries since 2015:
-
-## plot
-
 I will use a random forest model, using the [randomForest](https://cran.r-project.org/web/packages/randomForest/index.html) package in R. You can see the full code for training the model from the data on my [GitHub](LINK TO MODEL TRAINING)
 
-## model training
+```{r}
+# Load necessary libraries
+library(randomForest)
+library(doParallel)
+library(foreach)
+
+df <- t20_bbb
+
+# Ensure the categorical variables are factors
+df$ground <- as.factor(df$ground)
+df$bowl_kind <- as.factor(df$bowl_kind)
+df$bat_hand <- as.factor(df$bat_hand)
+
+# Set up parallel backend
+num_cores <- detectCores() - 1  # Use all but one core
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+
+# Define grid search parameters
+nodesizes <- c(3, 5, 10, 20, 30)
+mtry_value <- 3
+
+# Perform grid search
+set.seed(42)  # For reproducibility
+grid_results <- foreach(nodesize = nodesizes, .combine = rbind, .packages = 'randomForest') %dopar% {
+  rf_model <- randomForest(
+    formula = score_minus_wides_and_noballs ~ wagonX + wagonY + ground + bowl_kind + bat_hand + balls_rem,
+    data = df,
+    ntree = 100,       # Number of trees
+    mtry = mtry_value, # Fixed mtry value
+    nodesize = nodesize, # Vary nodesize
+    importance = FALSE # No need to calculate variable importance during grid search
+  )
+  
+  # Capture OOB error for this setting
+  data.frame(nodesize = nodesize, oob_error = rf_model$mse[length(rf_model$mse)])
+}
+
+# Stop the parallel backend
+stopCluster(cl)
+
+# View grid search results
+print(grid_results)
+```
 
 I now want to check that this model is giving us sensible predictions. Lets take a look at its predictions for deliveries at Edgbaston in our dataset.
 
