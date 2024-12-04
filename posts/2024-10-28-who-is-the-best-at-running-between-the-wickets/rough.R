@@ -128,7 +128,7 @@ ggplot(unique_points, aes(x = -wagonX, y = wagonY, fill = predictions)) +
         axis.ticks.y = element_blank())   # Remove y-axis ticks
 
  
-df_for_model$pred <- as.numeric(predict(rf_model))
+t20_bbb$pred <- as.numeric(predict(rf_model))
 
 
 df_for_model %>%
@@ -140,4 +140,23 @@ df_for_model %>%
 	arrange(extra_run_ave) %>%
 	filter(number >= 100) %>%
 	head(20)
+
+resuls_df <- bind_rows(
+	t20_bbb %>%
+		filter(!is.na(p_bat)) %>%
+		select(p_bat, score_minus_wides_and_noballs, pred) %>%
+		rename(player_id = p_bat),
+	t20_bbb %>%
+		filter(!is.na(p_nonstriker_bat)) %>%
+		select(p_nonstriker_bat, score_minus_wides_and_noballs, pred) %>%
+		rename(player_id = p_nonstriker_bat)
+) %>%
+	group_by(player_id) %>%
+		summarise(
+			number = n(),
+			extra_run_ave = mean(score_minus_wides_and_noballs - pred)
+		) %>%
+		arrange(extra_run_ave) %>%
+		filter(number >= 100) %>%
+		left_join(players_df)
  

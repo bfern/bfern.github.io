@@ -37,6 +37,25 @@ Lets now think about building the model. I should include the following variable
 I will use a random forest model, using the [randomForest](https://cran.r-project.org/web/packages/randomForest/index.html) package in R. You can see the full code for training the model from the data on my [GitHub](LINK TO MODEL TRAINING)
 
 ```{r}
+library(randomForest)
+ 
+rf_model <- randomForest(
+  score_minus_wides_and_noballs ~ 1 +
+    wagonX +
+    wagonY +
+    ground +
+    bowl_kind +
+    bat_hand +
+    balls_rem,
+  data = t20_bbb,
+  ntree = 100,
+  mtry = 3,
+  nodesize = 20,
+  importance = TRUE
+)
+```
+
+```{r}
 # Load necessary libraries
 library(randomForest)
 library(doParallel)
@@ -80,6 +99,38 @@ stopCluster(cl)
 # View grid search results
 print(grid_results)
 ```
+
+```{r}
+unique_points <- t20_bbb %>%
+  #filter(ground == "Edgbaston, Birmingham") %>%
+  distinct(wagonX, wagonY, bowl_kind, bat_hand, ground, balls_rem) #%>%
+  #mutate(ground = "Edgbaston, Birmingham")
+
+unique_points$predictions <- predict(rf_model, newdata = unique_points)
+
+ggplot(unique_points, aes(x = -wagonX, y = wagonY, fill = predictions)) +
+  geom_tile(color = "white") +  # Add a white border to the tiles for better visibility
+  facet_grid(bowl_kind ~ bat_hand) + 
+  scale_fill_gradientn(
+    #colors = c("red", "blue"),,
+    values = scales::rescale(c(0,3)),
+    #colors = c("red", "orange", "blue", "lightblue"),
+    colors = c("#FF0000", "orange", "blue", "#00FFFF"),  # Define the colors
+                       #values = scales::rescale(c(0, 1, 2, 3)),  # Rescale values
+                       limits = c(0, 3), 
+                       name = "Prediction") + 
+  labs(#title = "Predictions by -wagonX and wagonY for Ground: Edgbaston, Birmingham",
+       x = NULL, y = NULL) +  # Remove axis labels
+  theme_minimal() +
+  theme(panel.spacing = unit(2, "lines")) +  # Increase spacing between facets
+  geom_point(size = 4, shape = 21, color = "black", alpha = 0.7) +  # Add points with fixed size
+  scale_size_continuous(range = c(4, 4)) +  # Set all points to the same size
+  theme(axis.text.x = element_blank(),   # Remove x-axis text
+        axis.ticks.x = element_blank(),  # Remove x-axis ticks
+        axis.text.y = element_blank(),   # Remove y-axis text
+        axis.ticks.y = element_blank())   # Remove y-axis ticks
+```
+
 
 I now want to check that this model is giving us sensible predictions. Lets take a look at its predictions for deliveries at Edgbaston in our dataset.
 
