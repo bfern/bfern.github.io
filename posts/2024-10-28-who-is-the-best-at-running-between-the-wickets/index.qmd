@@ -4,7 +4,11 @@ date: "2024-11-13"
 categories: [cricket, data science, r, visualisation]
 ---
 
-Note to self: see ~/Downloads/rough.R for code that I have written so far.
+```{r setup}
+library(dplyr)
+library(ggplot2)
+library(randomForest)
+```
 
 Over the past few months, I've taken an interest in baseball analytics because there is so much cricket can learn from what has been done there. I've learnt that base running is a large component of the game, which struck me as odd since running between the wickets is neglected in cricket. But should it be? In this post, I will quantify the effect that a strong runner between the wickets has upon the team.
 
@@ -18,8 +22,12 @@ Firstly, lets take a look at the dataset that I am using. I am using ball by bal
 * Balls that did not go for a boundary
 * Balls with wagonwheel data (I'm assuming that these are only deliveries where the batter hit the ball)
 
-```{r}
+```{r load data}
 source("data.R")
+
+### should save these datasets to file so I don't need to keep on reading them in
+### thinking about it, I should do this only for deliveries where the batter scored runs. Or investigate the wagonX and wagonY when they don't - most of these deliveries go straight to the keeper, and I am interested in what happens when the batter hits the ball and it goes somewhere in the field.
+### 
 ```
 Lets take a look at this wagonwheel data, using different colours to denote the number of runs ran.
 
@@ -37,9 +45,7 @@ Lets now think about building the model. I should include the following variable
 I will use a random forest model, using the [randomForest](https://cran.r-project.org/web/packages/randomForest/index.html) package in R. You can see the full code for training the model from the data on my [GitHub](LINK TO MODEL TRAINING)
 
 ```{r}
-library(randomForest)
- 
-rf_model <- randomForest(
+ rf_model <- randomForest(
   score_minus_wides_and_noballs ~ 1 +
     wagonX +
     wagonY +
@@ -53,62 +59,20 @@ rf_model <- randomForest(
   nodesize = 20,
   importance = TRUE
 )
+
+##  need to save this model to file so dont need to keep on loading it in. Is this reproducible each time or do I need to set a seed?
 ```
 
-```{r}
-# Load necessary libraries
-library(randomForest)
-library(doParallel)
-library(foreach)
 
-df <- t20_bbb
+I now want to check that this model is giving us sensible predictions. Lets take a look at its predictions for deliveries at Edgbaston in our dataset.
 
-# Ensure the categorical variables are factors
-df$ground <- as.factor(df$ground)
-df$bowl_kind <- as.factor(df$bowl_kind)
-df$bat_hand <- as.factor(df$bat_hand)
+```{r analyse predictions}
+t20_bbb <- t20_bbb %>%
+  mutate(pred = pmax(pmin(as.numeric(predict(rf_model)), 3), 0))
 
-# Set up parallel backend
-num_cores <- detectCores() - 1  # Use all but one core
-cl <- makeCluster(num_cores)
-registerDoParallel(cl)
-
-# Define grid search parameters
-nodesizes <- c(3, 5, 10, 20, 30)
-mtry_value <- 3
-
-# Perform grid search
-set.seed(42)  # For reproducibility
-grid_results <- foreach(nodesize = nodesizes, .combine = rbind, .packages = 'randomForest') %dopar% {
-  rf_model <- randomForest(
-    formula = score_minus_wides_and_noballs ~ wagonX + wagonY + ground + bowl_kind + bat_hand + balls_rem,
-    data = df,
-    ntree = 100,       # Number of trees
-    mtry = mtry_value, # Fixed mtry value
-    nodesize = nodesize, # Vary nodesize
-    importance = FALSE # No need to calculate variable importance during grid search
-  )
-  
-  # Capture OOB error for this setting
-  data.frame(nodesize = nodesize, oob_error = rf_model$mse[length(rf_model$mse)])
-}
-
-# Stop the parallel backend
-stopCluster(cl)
-
-# View grid search results
-print(grid_results)
-```
-
-```{r}
-unique_points <- t20_bbb %>%
+t20_bbb %>%
   #filter(ground == "Edgbaston, Birmingham") %>%
-  distinct(wagonX, wagonY, bowl_kind, bat_hand, ground, balls_rem) #%>%
-  #mutate(ground = "Edgbaston, Birmingham")
-
-unique_points$predictions <- predict(rf_model, newdata = unique_points)
-
-ggplot(unique_points, aes(x = -wagonX, y = wagonY, fill = predictions)) +
+  ggplot(aes(x = -wagonX, y = wagonY, fill = pred)) +
   geom_tile(color = "white") +  # Add a white border to the tiles for better visibility
   facet_grid(bowl_kind ~ bat_hand) + 
   scale_fill_gradientn(
@@ -132,10 +96,6 @@ ggplot(unique_points, aes(x = -wagonX, y = wagonY, fill = predictions)) +
 ```
 
 
-I now want to check that this model is giving us sensible predictions. Lets take a look at its predictions for deliveries at Edgbaston in our dataset.
-
-## model prediction and graphing the output at edgbaston, add label to graph so people know where the bowlers end is
-
 To be perfectly honest, I wasn't expecting the model to come out as good as this. The graphs make a lot of intuitive sense to anyone who knows T20 cricket for a variety of reasons:
 * You can make out where the boundary fielders usually are, particuarly for the spinners - three on the leg side and two on the off.
 * You can also make out fielding positions that are almost always on the edge of the ring - for example backward point and extra cover.
@@ -143,7 +103,26 @@ To be perfectly honest, I wasn't expecting the model to come out as good as this
 
 So, given that we're happy with the model, lets see the results! Which batters score a lot more runs than expected? Lets take a look...
 
-## top run scorers and some commentary about it
+```{r}
+results_df <- bind_rows(
+	t20_bbb %>%
+		filter(!is.na(p_bat)) %>%
+		select(p_bat, score_minus_wides_and_noballs, pred) %>%
+		rename(player_id = p_bat),
+	t20_bbb %>%
+		filter(!is.na(p_nonstriker_bat)) %>%
+		select(p_nonstriker_bat, score_minus_wides_and_noballs, pred) %>%
+		rename(player_id = p_nonstriker_bat)
+) %>%
+	group_by(player_id) %>%
+		summarise(
+			number = n(),
+			extra_run_ave = mean(score_minus_wides_and_noballs - pred)
+		) %>%
+		arrange(extra_run_ave) %>%
+		filter(number >= 100) %>%
+		left_join(players_df)
+```
 
 What about those who do a lot worse than expected
 
