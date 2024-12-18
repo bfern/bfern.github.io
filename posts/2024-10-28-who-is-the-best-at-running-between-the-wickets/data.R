@@ -111,3 +111,80 @@ t20_bbb <- t20_bbb %>%
   select(
     p_match, inns, over, ball, p_bat, p_nonstriker_bat, wagonX, wagonY, bat_hand, bowl_kind, balls_rem, ground, score_minus_wides_and_noballs
   )
+
+
+## Rough
+t20_bbb <- t20_bbb_list %>%
+  bind_rows() %>%
+  mutate(
+    wickets_lost = inns_wkts - as.numeric(out),
+    score_minus_wides_and_noballs = score - (wide + noball),
+    balls_rem = inns_balls_rem + as.numeric(!outcome %in% c("no ball", "wide"))
+  ) %>%
+  filter(wagonZone != 0) %>%
+  filter(wagonX != 180 | wagonY != 165) %>%
+  filter(wagonX != 180 | wagonY != 140) %>%
+  filter(is.na(dismissal) | (!is.na(dismissal) & dismissal == "run out")) %>%
+  mutate(boundary = score_minus_wides_and_noballs >= 4)
+
+t20_bbb %>%
+    ggplot(aes(x = wagonX, y = wagonY, col = boundary)) +
+    geom_point()
+
+library(class)
+
+
+# Define training and test datasets
+train_data <- t20_bbb %>%
+  mutate(
+    wagonX = wagonX + rnorm(n(), sd = 0.001),
+    wagonY = wagonY + rnorm(n(), sd = 0.001)
+  )
+
+# Define the grid for prediction (to visualize probabilities)
+resolution <- 100  # Resolution of the grid
+x_range <- seq(0, 360, by = 1)
+y_range <- seq(0, 360, by = 1)
+grid <- expand.grid(wagonX = x_range, wagonY = y_range)
+
+# Prepare training data
+train_features <- train_data %>% select(wagonX, wagonY) %>% as.matrix()
+train_labels <- train_data$boundary
+
+# Predict probabilities using k-NN
+k <- 20
+predictions <- knn(train = train_features, test = t20_bbb %>% select(wagonX, wagonY) %>% as.matrix(), cl = train_labels, k = k, prob = TRUE)
+
+# Extract probabilities for class "1"
+probabilities <- attr(predictions, "prob")
+probabilities <- ifelse(as.numeric(predictions) == 1, probabilities, 1 - probabilities)
+
+# Plot the probability heatmap
+t20_bbb %>%
+  mutate(probability = probabilities) %>%
+  filter(probability >= 0.5) %>%
+  ggplot() +
+  #geom_point(data = grid, aes(x = wagonX, y = wagonY, col = probability), alpha = 0.8) +
+  geom_point(aes(x = wagonX, y = wagonY, color = probability), size = 2) +
+  #scale_fill_gradient(low = "blue", high = "red", name = "P(Class 1)") +
+  #scale_color_manual(values = c("black", "white"), name = "Boundary") +
+  labs(title = "k-NN Probability Heatmap", x = "wagonX", y = "wagonY") +
+  theme_minimal()
+
+
+### we keep probabilities where it is >= 0.5
+
+data_for_model <- t20_bbb <- t20_bbb %>%
+  slice(which(probabilities >= 0.5)) %>%
+  left_join(num_bats_seen_per_wicket, by = c("p_match", "inns", "wickets_lost")) %>%
+  left_join(first_bat_seen_per_wicket, by = c("p_match", "inns", "wickets_lost")) %>%
+  left_join(second_bat_seen_per_wicket, by = c("p_match", "inns", "wickets_lost")) %>%
+  mutate(p_nonstriker_bat = if_else(num_bats_seen == 2, if_else(p_bat == first_bat_seen, second_bat_seen, first_bat_seen), NA)) %>%
+  filter(
+    score_minus_wides_and_noballs <= 3,
+    over >= 7, # exclude powerplay
+    bowl_kind != "mixture/unknown" #  exclude if we don't know bowler type
+  ) %>%
+  select(
+    p_match, inns, over, ball, p_bat, p_nonstriker_bat, wagonX, wagonY, bat_hand, bowl_kind, balls_rem, ground, score_minus_wides_and_noballs
+  )

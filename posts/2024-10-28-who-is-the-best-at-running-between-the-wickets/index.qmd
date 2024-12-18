@@ -25,9 +25,14 @@ Firstly, lets take a look at the dataset that I am using. I am using ball by bal
 ```{r load data}
 source("data.R")
 
+### ensure that we are removing wagonZone == 0 (rather than wagonX or wagonY)
 ### should save these datasets to file so I don't need to keep on reading them in
 ### thinking about it, I should do this only for deliveries where the batter scored runs. Or investigate the wagonX and wagonY when they don't - most of these deliveries go straight to the keeper, and I am interested in what happens when the batter hits the ball and it goes somewhere in the field.
-### 
+### some notes: 180, 165 is coords for bowled/lbw. 180, 140 is coords for caught behind. 180, 140 is misses and go to keeper. We should remove these two.
+### also filter to wagonX <= 368, wagonY <= 380 (and both >= 0)
+### There are also a lot of values where we have 180, 125 and 180, 204. What do these both mean? 180, 125 is also goes straight to keeper. 180, 204 is straight back to bowler
+### Probably just get rid of all of these sorts of values tbh
+### Once I have got rid of these values and other values through K means, I should optimize hyperparameters (in particular best tree split size)
 ```
 Lets take a look at this wagonwheel data, using different colours to denote the number of runs ran.
 
@@ -45,7 +50,7 @@ Lets now think about building the model. I should include the following variable
 I will use a random forest model, using the [randomForest](https://cran.r-project.org/web/packages/randomForest/index.html) package in R. You can see the full code for training the model from the data on my [GitHub](LINK TO MODEL TRAINING)
 
 ```{r}
- rf_model <- randomForest(
+rf_model <- randomForest(
   score_minus_wides_and_noballs ~ 1 +
     wagonX +
     wagonY +
