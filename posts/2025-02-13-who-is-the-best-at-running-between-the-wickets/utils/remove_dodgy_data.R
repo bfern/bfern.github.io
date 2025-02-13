@@ -10,10 +10,11 @@ remove_dodgy_data <- function(df) {
       (wagonX != 180 | wagonY != 165), # used for batter misses and ball either hits batter or stumps
       (wagonX != 180 | wagonY != 204) # used for ball goes straight to bowler
     )
-  boundary_model <- build_boundary_model_from_wagonwheel_coords(
+  build_boundary_model_from_wagonwheel_coords(
     as.factor(df_filtered$score_minus_wides_and_noballs >= 4),
     df_filtered %>% select(wagonX, wagonY)
   )
+  boundary_model <- readRDS("models/boundary_model_from_wagonwheel_coords.rds")
   df_filtered <- df_filtered %>%
     remove_likely_boundaries(boundary_model)
   df_filtered
@@ -36,8 +37,6 @@ build_boundary_model_from_wagonwheel_coords <- function(boundaries, wagonwheel_c
       prob = TRUE
     )
     saveRDS(boundary_model, boundary_model_file)
-  } else {
-    boundary_model <- readRDS(boundary_model_file)
   }
 }
 
