@@ -1,3 +1,5 @@
+library(dplyr)
+
 filter_data <- function(df) {
   df %>%
     filter(
