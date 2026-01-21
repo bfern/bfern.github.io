@@ -85,4 +85,21 @@ Lets now break this down into different phases of the game: powerplay, middle ov
 
 Lets now see how the same table for bowlers.
 
+```{r}
+bowling_contributions_df |>
+  group_by(bowler) |>
+  summarise(
+    num_innings = length(unique(matchid)),
+    num_balls = n(),
+    total_contr = sum(contr),
+    .groups = "drop"
+  ) |>
+  mutate(
+    mean_contr_per_innings = total_contr / num_innings,
+    mean_contr_per_ball = total_contr / num_balls
+  ) |>
+  arrange(total_contr) |>
+  head(20)
+```
+
 And lets also break this down into powerplay, middle overs and death phases.
