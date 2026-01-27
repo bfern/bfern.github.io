@@ -4,7 +4,14 @@ date: "2026-01-19"
 categories: [cricket, data science, r]
 ---
 
-In a [previous blog post](https://bfern.github.io/posts/2023-05-17-introducing-contribution-score/), I have introduced the metric *contribution score*, which looks at the game situation, opposition player and venue and tells you how well a player has performed for each delivery of a match. This allows you to compare performances between batters and bowlers, and understand the impact of wickets compared with run prevention. I have calculated this contribution score for all deliveries in the 2025 IPL season, and in this post I will provide some basic analysis of these values.
+**TO DO:**
+
+* Add the following columns: runs/wickets, average, SR/ER
+* Is the whole data there? Think I'm missing some games
+* Add balls remaining/powerplay variable to data so that I can filter correctly
+
+
+In a [previous blog post](https://bfern.github.io/posts/2023-05-17-introducing-contribution-score/), I have introduced the metric *contribution score*, which looks at the game situation, opposition player and venue and tells you how well a player has performed for each delivery of a match. This allows you to compare performances between batters and bowlers, and understand the impact of wickets compared with run prevention. I have calculated this contribution score for all deliveries in the 2025 IPL season, and in this post I will provide some basic analysis of these values. If you'd like to compare this to the standard metrics, then you can see the top run scorers [here](https://www.espncricinfo.com/records/tournament/batting-most-runs-career/indian-premier-league-2025-16622) and the top wicket takers [here](https://www.espncricinfo.com/records/tournament/bowling-most-wickets-career/indian-premier-league-2025-16622).
 
 ```{r}
 #| label: setup
@@ -14,6 +21,7 @@ library(dplyr)
 library(yaml)
 library(DBI)
 library(RPostgres)
+library(DT)
 
 config <- read_yaml(file.path(path.expand("~"), ".config", "config.yaml"))
 con <- dbConnect(
@@ -62,9 +70,15 @@ bowling_contributions_df <- read_csv(file.path(
   left_join(balls_df, by = c("matchid", "inningsid", "overid", "deliveryid"))
 ```
 
-We will start off with an interactive summary of the contribution scores per batter over all game situations. Toggle the tables to order by a different column value (simply click on the column).
+I will produce tables for both batting and bowling contributions, across all phases of the match and then split by powerplay, middle overs and death. These tables are all interactive - you can sort the columns by simply clicking on the column name.
+
+### Batting
+
+We will start off with an interactive summary of the contribution scores per batter over all game situations. I have filtered to at least 100 balls faced by the batter.
 
 ```{r}
+#| label: batting overall
+#| echo: false
 batting_contributions_df |>
   group_by(striker) |>
   summarise(
@@ -78,14 +92,165 @@ batting_contributions_df |>
     mean_contr_per_ball = total_contr / num_balls
   ) |>
   arrange(desc(total_contr)) |>
-  head(20)
+  filter(num_balls >= 100) |>
+  DT::datatable(
+    rownames = FALSE,
+    class = "stripe hover compact",
+    colnames = c(
+      "Name",
+      "Innings",
+      "Balls",
+      "Total Contribution",
+      "Contr Per Inns",
+      "Contr Per Ball"
+    ),
+    options = list(
+      pageLength = 10,
+      dom = "lftip",
+      scrollX = TRUE
+    )
+  ) |>
+  formatRound("total_contr", 0) |>
+  formatRound("mean_contr_per_innings", 2) |>
+  formatRound("mean_contr_per_ball", 3)
 ```
 
-Lets now break this down into different phases of the game: powerplay, middle overs (overs 7-15) and death (overs 16-20).
+Lets now break this down into different phases of the game: powerplay, middle overs (overs 7-15) and death (overs 16-20). Each of these tables is filtered to at least 50 balls faced by the batter.
 
-Lets now see how the same table for bowlers.
+**Powerplay**
+(need to do this properly by joining to powerplay variable)
 
 ```{r}
+#| label: batting powerplay
+#| echo: false
+batting_contributions_df |>
+  filter(overid %in% 0:5) |>
+  group_by(striker) |>
+  summarise(
+    num_innings = length(unique(matchid)),
+    num_balls = n(),
+    total_contr = sum(contr),
+    .groups = "drop"
+  ) |>
+  mutate(
+    mean_contr_per_innings = total_contr / num_innings,
+    mean_contr_per_ball = total_contr / num_balls
+  ) |>
+  arrange(desc(total_contr)) |>
+  filter(num_balls >= 50) |>
+  DT::datatable(
+    rownames = FALSE,
+    class = "stripe hover compact",
+    colnames = c(
+      "Name",
+      "Innings",
+      "Balls",
+      "Total Contribution",
+      "Contr Per Inns",
+      "Contr Per Ball"
+    ),
+    options = list(
+      pageLength = 10,
+      dom = "lftip",
+      scrollX = TRUE
+    )
+  ) |>
+  formatRound("total_contr", 0) |>
+  formatRound("mean_contr_per_innings", 2) |>
+  formatRound("mean_contr_per_ball", 3)
+```
+
+**Middle Overs**
+
+```{r}
+#| label: batting middle overs
+#| echo: false
+batting_contributions_df |>
+  filter(overid %in% 6:14) |>
+  group_by(striker) |>
+  summarise(
+    num_innings = length(unique(matchid)),
+    num_balls = n(),
+    total_contr = sum(contr),
+    .groups = "drop"
+  ) |>
+  mutate(
+    mean_contr_per_innings = total_contr / num_innings,
+    mean_contr_per_ball = total_contr / num_balls
+  ) |>
+  arrange(desc(total_contr)) |>
+  filter(num_balls >= 50) |>
+  DT::datatable(
+    rownames = FALSE,
+    class = "stripe hover compact",
+    colnames = c(
+      "Name",
+      "Innings",
+      "Balls",
+      "Total Contribution",
+      "Contr Per Inns",
+      "Contr Per Ball"
+    ),
+    options = list(
+      pageLength = 10,
+      dom = "lftip",
+      scrollX = TRUE
+    )
+  ) |>
+  formatRound("total_contr", 0) |>
+  formatRound("mean_contr_per_innings", 2) |>
+  formatRound("mean_contr_per_ball", 3)
+```
+
+**Death**
+
+```{r}
+#| label: batting death
+#| echo: false
+batting_contributions_df |>
+  filter(overid %in% 15:19) |>
+  group_by(striker) |>
+  summarise(
+    num_innings = length(unique(matchid)),
+    num_balls = n(),
+    total_contr = sum(contr),
+    .groups = "drop"
+  ) |>
+  mutate(
+    mean_contr_per_innings = total_contr / num_innings,
+    mean_contr_per_ball = total_contr / num_balls
+  ) |>
+  arrange(desc(total_contr)) |>
+  filter(num_balls >= 50) |>
+  DT::datatable(
+    rownames = FALSE,
+    class = "stripe hover compact",
+    colnames = c(
+      "Name",
+      "Innings",
+      "Balls",
+      "Total Contribution",
+      "Contr Per Inns",
+      "Contr Per Ball"
+    ),
+    options = list(
+      pageLength = 10,
+      dom = "lftip",
+      scrollX = TRUE
+    )
+  ) |>
+  formatRound("total_contr", 0) |>
+  formatRound("mean_contr_per_innings", 2) |>
+  formatRound("mean_contr_per_ball", 3)
+```
+
+### Bowling
+
+Lets now see how the same table for bowlers, starting with all phases of the game. A minimum of 100 balls bowled per bowler is required.
+
+```{r}
+#| label: bowling overall
+#| echo: false
 bowling_contributions_df |>
   group_by(bowler) |>
   summarise(
@@ -99,7 +264,154 @@ bowling_contributions_df |>
     mean_contr_per_ball = total_contr / num_balls
   ) |>
   arrange(total_contr) |>
-  head(20)
+  filter(num_balls >= 100) |>
+  DT::datatable(
+    rownames = FALSE,
+    class = "stripe hover compact",
+    colnames = c(
+      "Name",
+      "Innings",
+      "Balls",
+      "Total Contribution",
+      "Contr Per Inns",
+      "Contr Per Ball"
+    ),
+    options = list(
+      pageLength = 10,
+      dom = "lftip",
+      scrollX = TRUE
+    )
+  ) |>
+  formatRound("total_contr", 0) |>
+  formatRound("mean_contr_per_innings", 2) |>
+  formatRound("mean_contr_per_ball", 3)
 ```
 
-And lets also break this down into powerplay, middle overs and death phases.
+Lets now break this down into different phases of the game: powerplay, middle overs (overs 7-15) and death (overs 16-20), filtering to at least 50 balls bowler for a bowler.
+
+**Powerplay**
+(need to do this properly by joining to powerplay variable)
+
+```{r}
+#| label: bowling powerplay
+#| echo: false
+bowling_contributions_df |>
+  filter(overid %in% 0:5) |>
+  group_by(bowler) |>
+  summarise(
+    num_innings = length(unique(matchid)),
+    num_balls = n(),
+    total_contr = sum(contr),
+    .groups = "drop"
+  ) |>
+  mutate(
+    mean_contr_per_innings = total_contr / num_innings,
+    mean_contr_per_ball = total_contr / num_balls
+  ) |>
+  arrange(total_contr) |>
+  filter(num_balls >= 50) |>
+  DT::datatable(
+    rownames = FALSE,
+    class = "stripe hover compact",
+    colnames = c(
+      "Name",
+      "Innings",
+      "Balls",
+      "Total Contribution",
+      "Contr Per Inns",
+      "Contr Per Ball"
+    ),
+    options = list(
+      pageLength = 10,
+      dom = "lftip",
+      scrollX = TRUE
+    )
+  ) |>
+  formatRound("total_contr", 0) |>
+  formatRound("mean_contr_per_innings", 2) |>
+  formatRound("mean_contr_per_ball", 3)
+```
+
+**Middle Overs**
+
+```{r}
+#| label: bowling middle overs
+#| echo: false
+bowling_contributions_df |>
+  filter(overid %in% 6:14) |>
+  group_by(bowler) |>
+  summarise(
+    num_innings = length(unique(matchid)),
+    num_balls = n(),
+    total_contr = sum(contr),
+    .groups = "drop"
+  ) |>
+  mutate(
+    mean_contr_per_innings = total_contr / num_innings,
+    mean_contr_per_ball = total_contr / num_balls
+  ) |>
+  arrange(total_contr) |>
+  filter(num_balls >= 50) |>
+  DT::datatable(
+    rownames = FALSE,
+    class = "stripe hover compact",
+    colnames = c(
+      "Name",
+      "Innings",
+      "Balls",
+      "Total Contribution",
+      "Contr Per Inns",
+      "Contr Per Ball"
+    ),
+    options = list(
+      pageLength = 10,
+      dom = "lftip",
+      scrollX = TRUE
+    )
+  ) |>
+  formatRound("total_contr", 0) |>
+  formatRound("mean_contr_per_innings", 2) |>
+  formatRound("mean_contr_per_ball", 3)
+```
+
+**Death**
+
+```{r}
+#| label: bowling death
+#| echo: false
+bowling_contributions_df |>
+  filter(overid %in% 15:19) |>
+  group_by(bowler) |>
+  summarise(
+    num_innings = length(unique(matchid)),
+    num_balls = n(),
+    total_contr = sum(contr),
+    .groups = "drop"
+  ) |>
+  mutate(
+    mean_contr_per_innings = total_contr / num_innings,
+    mean_contr_per_ball = total_contr / num_balls
+  ) |>
+  arrange(total_contr) |>
+  filter(num_balls >= 50) |>
+  DT::datatable(
+    rownames = FALSE,
+    class = "stripe hover compact",
+    colnames = c(
+      "Name",
+      "Innings",
+      "Balls",
+      "Total Contribution",
+      "Contr Per Inns",
+      "Contr Per Ball"
+    ),
+    options = list(
+      pageLength = 10,
+      dom = "lftip",
+      scrollX = TRUE
+    )
+  ) |>
+  formatRound("total_contr", 0) |>
+  formatRound("mean_contr_per_innings", 2) |>
+  formatRound("mean_contr_per_ball", 3)
+```
