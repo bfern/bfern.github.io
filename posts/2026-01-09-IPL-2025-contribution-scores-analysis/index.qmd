@@ -1,17 +1,13 @@
 ---
 title: IPL 2025 Contribution Score Analysis
-date: "2026-01-19"
+date: "2026-02-01"
 categories: [cricket, data science, r]
 ---
 
-**TO DO:**
+In a [previous blog post](https://bfern.github.io/posts/2023-05-17-introducing-contribution-score/), I have introduced the metric *contribution score*, which looks at the game situation, opposition player and venue and tells you how well a player has performed for each delivery of a match. This allows you to compare performances between batters and bowlers, and understand the impact of wickets compared with run prevention. I have calculated the contribution score for deliveries in the 2025 IPL season, and in this post I will provide some basic analysis of these values. If you'd like to compare this to the standard metrics, then you can see the top run scorers [here](https://www.espncricinfo.com/records/tournament/batting-most-runs-career/indian-premier-league-2025-16622) and the top wicket takers [here](https://www.espncricinfo.com/records/tournament/bowling-most-wickets-career/indian-premier-league-2025-16622). Be aware that my statistics for averages may appear to misalign for a couple of reasons:
 
-* Rerun so that the wide and no ball contributions are penalised against the bowler (have made edits in the script to do this, it just needs to be ran)
-* Note to the reader that I have removed abandoned games, and also only bowler dismissals are being counted towards batter dismissal tally - so counts might not exacty match up to cricinfo pages
-* Add balls remaining/powerplay variable to data so that I can filter correctly
-
-
-In a [previous blog post](https://bfern.github.io/posts/2023-05-17-introducing-contribution-score/), I have introduced the metric *contribution score*, which looks at the game situation, opposition player and venue and tells you how well a player has performed for each delivery of a match. This allows you to compare performances between batters and bowlers, and understand the impact of wickets compared with run prevention. I have calculated this contribution score for all deliveries in the 2025 IPL season, and in this post I will provide some basic analysis of these values. If you'd like to compare this to the standard metrics, then you can see the top run scorers [here](https://www.espncricinfo.com/records/tournament/batting-most-runs-career/indian-premier-league-2025-16622) and the top wicket takers [here](https://www.espncricinfo.com/records/tournament/bowling-most-wickets-career/indian-premier-league-2025-16622).
+* I remove matches which were abandoned or rain affected because I cannot calculate contribution scores for these matches.
+* Batting averages are calculated using only dismissals attributed to the bowler (so doesn't include run outs), not all dismissals.
 
 ```{r}
 #| label: setup
@@ -61,20 +57,27 @@ balls_df <- dbGetQuery(
             'lbw',
             'hit wicket'
         )
-    ) AS dismissed
+    ) AS dismissed,
+    ((overid > overid_ppstart) or ( (overid = overid_ppstart) and (deliveryid >= deliveryid_ppstart) ) ) and ( (overid < overid_ppend) or ( (overid = overid_ppend) and (deliveryid <= deliveryid_ppend) ) ) as powerplay,
+    m.target_overs as innings_overs
   from
     staging.balls b
   left join
     staging.matches m
   on
     b.matchid = m.matchid
+  left join
+  	staging.powerplays p
+  on
+  	(b.matchid = p.matchid) and
+  	(b.inningsid = p.inningsid)
   where
     (m.comp = 'IPL') and
     (b.inningsid in (1, 2)) and
     (m.date >= '2025-03-22') and
     (m.date <= '2025-06-03') and
     (m.completed_match) and
-    (NOT m.rain_affected)
+    (not m.rain_affected)
   ;
 "
 )
@@ -156,20 +159,28 @@ batting_contributions_df |>
   formatRound("mean_contr_per_ball", 3)
 ```
 
-Lets now break this down into different phases of the game: powerplay, middle overs (overs 7-15) and death (overs 16-20). Each of these tables is filtered to at least 50 balls faced by the batter.
+Lets now break this down into different phases of the game:
+
+* powerplay
+* middle overs (overs 7-15)
+* death (overs 16-20).
+
+Each of these tables is filtered to at least 50 balls faced by the batter.
 
 **Powerplay**
-(need to do this properly by joining to powerplay variable)
 
 ```{r}
 #| label: batting powerplay
 #| echo: false
 batting_contributions_df |>
-  filter(overid %in% 0:5) |>
+  filter(powerplay) |>
   group_by(striker) |>
   summarise(
     num_innings = length(unique(matchid)),
     num_balls = n(),
+    total_runs = sum(runs),
+    ave = sum(runs) / sum(dismissed),
+    sr = (sum(runs) / n()) * 100,
     total_contr = sum(contr),
     .groups = "drop"
   ) |>
@@ -184,9 +195,12 @@ batting_contributions_df |>
     class = "stripe hover compact",
     colnames = c(
       "Name",
-      "Innings",
+      "Inns",
       "Balls",
-      "Total Contribution",
+      "Runs",
+      "Ave",
+      "SR",
+      "Total Contr",
       "Contr Per Inns",
       "Contr Per Ball"
     ),
@@ -196,6 +210,8 @@ batting_contributions_df |>
       scrollX = TRUE
     )
   ) |>
+  formatRound("ave", 1) |>
+  formatRound("sr", 0) |>
   formatRound("total_contr", 0) |>
   formatRound("mean_contr_per_innings", 2) |>
   formatRound("mean_contr_per_ball", 3)
@@ -207,11 +223,14 @@ batting_contributions_df |>
 #| label: batting middle overs
 #| echo: false
 batting_contributions_df |>
-  filter(overid %in% 6:14) |>
+  filter(!powerplay, overid < innings_overs - 5) |>
   group_by(striker) |>
   summarise(
     num_innings = length(unique(matchid)),
     num_balls = n(),
+    total_runs = sum(runs),
+    ave = sum(runs) / sum(dismissed),
+    sr = (sum(runs) / n()) * 100,
     total_contr = sum(contr),
     .groups = "drop"
   ) |>
@@ -226,9 +245,12 @@ batting_contributions_df |>
     class = "stripe hover compact",
     colnames = c(
       "Name",
-      "Innings",
+      "Inns",
       "Balls",
-      "Total Contribution",
+      "Runs",
+      "Ave",
+      "SR",
+      "Total Contr",
       "Contr Per Inns",
       "Contr Per Ball"
     ),
@@ -238,6 +260,8 @@ batting_contributions_df |>
       scrollX = TRUE
     )
   ) |>
+  formatRound("ave", 1) |>
+  formatRound("sr", 0) |>
   formatRound("total_contr", 0) |>
   formatRound("mean_contr_per_innings", 2) |>
   formatRound("mean_contr_per_ball", 3)
@@ -249,11 +273,14 @@ batting_contributions_df |>
 #| label: batting death
 #| echo: false
 batting_contributions_df |>
-  filter(overid %in% 15:19) |>
+  filter(!powerplay, overid >= innings_overs - 5) |>
   group_by(striker) |>
   summarise(
     num_innings = length(unique(matchid)),
     num_balls = n(),
+    total_runs = sum(runs),
+    ave = sum(runs) / sum(dismissed),
+    sr = (sum(runs) / n()) * 100,
     total_contr = sum(contr),
     .groups = "drop"
   ) |>
@@ -268,9 +295,12 @@ batting_contributions_df |>
     class = "stripe hover compact",
     colnames = c(
       "Name",
-      "Innings",
+      "Inns",
       "Balls",
-      "Total Contribution",
+      "Runs",
+      "Ave",
+      "SR",
+      "Total Contr",
       "Contr Per Inns",
       "Contr Per Ball"
     ),
@@ -280,6 +310,8 @@ batting_contributions_df |>
       scrollX = TRUE
     )
   ) |>
+  formatRound("ave", 1) |>
+  formatRound("sr", 0) |>
   formatRound("total_contr", 0) |>
   formatRound("mean_contr_per_innings", 2) |>
   formatRound("mean_contr_per_ball", 3)
@@ -287,7 +319,7 @@ batting_contributions_df |>
 
 ### Bowling
 
-Lets now see how the same table for bowlers, starting with all phases of the game. A minimum of 100 balls bowled per bowler is required.
+Lets now see the same tables for bowlers, starting with all phases of the game. A minimum of 100 balls bowled per bowler is required.
 
 ```{r}
 #| label: bowling overall
@@ -343,20 +375,29 @@ bowling_contributions_df |>
   formatRound("mean_contr_per_ball", 3)
 ```
 
-Lets now break this down into different phases of the game: powerplay, middle overs (overs 7-15) and death (overs 16-20), filtering to at least 50 balls bowler for a bowler.
+We will break this down into the three different phases of the game again, filtering to at least 50 balls bowled for a bowler.
 
 **Powerplay**
-(need to do this properly by joining to powerplay variable)
 
 ```{r}
 #| label: bowling powerplay
 #| echo: false
 bowling_contributions_df |>
-  filter(overid %in% 0:5) |>
+  filter(powerplay) |>
   group_by(bowler) |>
   summarise(
     num_innings = length(unique(matchid)),
-    num_balls = n(),
+    num_balls = sum(!extras_type %in% c("wide", "noball")),
+    total_wickets = sum(dismissed),
+    ave = sum(
+      runs + if_else(extras_type %in% c("wide", "noball"), extras, 0)
+    ) /
+      sum(dismissed),
+    er = sum(
+      runs + if_else(extras_type %in% c("wide", "noball"), extras, 0)
+    ) /
+      sum(!extras_type %in% c("wide", "noball")) *
+      6,
     total_contr = sum(contr),
     .groups = "drop"
   ) |>
@@ -371,9 +412,12 @@ bowling_contributions_df |>
     class = "stripe hover compact",
     colnames = c(
       "Name",
-      "Innings",
+      "Inns",
       "Balls",
-      "Total Contribution",
+      "Wickets",
+      "Ave",
+      "Econ",
+      "Total Contr",
       "Contr Per Inns",
       "Contr Per Ball"
     ),
@@ -383,6 +427,8 @@ bowling_contributions_df |>
       scrollX = TRUE
     )
   ) |>
+  formatRound("ave", 1) |>
+  formatRound("er", 2) |>
   formatRound("total_contr", 0) |>
   formatRound("mean_contr_per_innings", 2) |>
   formatRound("mean_contr_per_ball", 3)
@@ -394,11 +440,21 @@ bowling_contributions_df |>
 #| label: bowling middle overs
 #| echo: false
 bowling_contributions_df |>
-  filter(overid %in% 6:14) |>
+  filter(!powerplay, overid < innings_overs - 5) |>
   group_by(bowler) |>
   summarise(
     num_innings = length(unique(matchid)),
-    num_balls = n(),
+    num_balls = sum(!extras_type %in% c("wide", "noball")),
+    total_wickets = sum(dismissed),
+    ave = sum(
+      runs + if_else(extras_type %in% c("wide", "noball"), extras, 0)
+    ) /
+      sum(dismissed),
+    er = sum(
+      runs + if_else(extras_type %in% c("wide", "noball"), extras, 0)
+    ) /
+      sum(!extras_type %in% c("wide", "noball")) *
+      6,
     total_contr = sum(contr),
     .groups = "drop"
   ) |>
@@ -413,9 +469,12 @@ bowling_contributions_df |>
     class = "stripe hover compact",
     colnames = c(
       "Name",
-      "Innings",
+      "Inns",
       "Balls",
-      "Total Contribution",
+      "Wickets",
+      "Ave",
+      "Econ",
+      "Total Contr",
       "Contr Per Inns",
       "Contr Per Ball"
     ),
@@ -425,6 +484,8 @@ bowling_contributions_df |>
       scrollX = TRUE
     )
   ) |>
+  formatRound("ave", 1) |>
+  formatRound("er", 2) |>
   formatRound("total_contr", 0) |>
   formatRound("mean_contr_per_innings", 2) |>
   formatRound("mean_contr_per_ball", 3)
@@ -436,11 +497,21 @@ bowling_contributions_df |>
 #| label: bowling death
 #| echo: false
 bowling_contributions_df |>
-  filter(overid %in% 15:19) |>
+  filter(!powerplay, overid >= innings_overs - 5) |>
   group_by(bowler) |>
   summarise(
     num_innings = length(unique(matchid)),
-    num_balls = n(),
+    num_balls = sum(!extras_type %in% c("wide", "noball")),
+    total_wickets = sum(dismissed),
+    ave = sum(
+      runs + if_else(extras_type %in% c("wide", "noball"), extras, 0)
+    ) /
+      sum(dismissed),
+    er = sum(
+      runs + if_else(extras_type %in% c("wide", "noball"), extras, 0)
+    ) /
+      sum(!extras_type %in% c("wide", "noball")) *
+      6,
     total_contr = sum(contr),
     .groups = "drop"
   ) |>
@@ -455,9 +526,12 @@ bowling_contributions_df |>
     class = "stripe hover compact",
     colnames = c(
       "Name",
-      "Innings",
+      "Inns",
       "Balls",
-      "Total Contribution",
+      "Wickets",
+      "Ave",
+      "Econ",
+      "Total Contr",
       "Contr Per Inns",
       "Contr Per Ball"
     ),
@@ -467,6 +541,8 @@ bowling_contributions_df |>
       scrollX = TRUE
     )
   ) |>
+  formatRound("ave", 1) |>
+  formatRound("er", 2) |>
   formatRound("total_contr", 0) |>
   formatRound("mean_contr_per_innings", 2) |>
   formatRound("mean_contr_per_ball", 3)
