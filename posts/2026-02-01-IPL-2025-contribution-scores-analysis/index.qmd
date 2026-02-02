@@ -2,6 +2,7 @@
 title: IPL 2025 Contribution Score Analysis
 date: "2026-02-01"
 categories: [cricket, data science, r]
+image: thumbnail.jpg
 ---
 
 In a [previous blog post](https://bfern.github.io/posts/2023-05-17-introducing-contribution-score/), I have introduced the metric *contribution score*, which looks at the game situation, opposition player and venue and tells you how well a player has performed for each delivery of a match. This allows you to compare performances between batters and bowlers, and understand the impact of wickets compared with run prevention. I have calculated the contribution score for deliveries in the 2025 IPL season, and in this post I will provide some basic analysis of these values. If you'd like to compare this to the standard metrics, then you can see the top run scorers [here](https://www.espncricinfo.com/records/tournament/batting-most-runs-career/indian-premier-league-2025-16622) and the top wicket takers [here](https://www.espncricinfo.com/records/tournament/bowling-most-wickets-career/indian-premier-league-2025-16622). Be aware that my statistics for averages may appear to misalign for a couple of reasons:
