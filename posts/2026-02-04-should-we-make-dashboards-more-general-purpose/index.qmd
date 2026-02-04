@@ -1,0 +1,21 @@
+---
+title: Should we make dashboards more general purpose?
+date: "2026-02-04"
+categories: [visualisation, work chat]
+---
+
+Structure:
+1. Should we have more general purpose dashboards? What are the advantages?
+  * Finding things is easier with one rather than which dashboard is it - generally things shouldn't be nested too deep
+  * Stakeholders (and generally people in knowledge work) should be data savvy enough to find what they need.
+  * new work often isn't used - it is better to build onto things that are already being used (generally and this can be applied to dashboards)
+2. What should they look like?
+  * See my post it note, and use that to explain the design.
+  * if people want something that drills down more then this, then they should have read analytics to the data warehouse and learn SQL (and views).
+3. What would they be built with?
+  * Use Shiny, and see my other blog post about what roles should be hired inside a data team.
+4. Other points to include:
+  * Important to consider who your audience is. If they are high up, then they will usually just want to see KPIs, but if they are lower down then they will usually want to drill into the insights. Thinking about this more generally, you are either using the numbers for reporting purposes, or you are making data driven decisions - these are the main two purposes.
+  * Take a look at some other resources before posting: https://medium.com/@designmatch/exploring-the-best-dashboards-design-a-practical-guide-0995ded5f77b
+
+
