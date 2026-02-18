@@ -13,7 +13,7 @@ Section 2 - How to solve this
 * Generally the idea is to build a new dashboard for a new question - instead it should be to build upon the general purpose dashboard for a new question
 
 Section 3 - Advantages of this (aside from those stated above)
-* Long term adoption - most operations data remains as the dataset for a long time. Data is either used for a very short amount of time (in which case you won't be considering something like this and should probably use the in built analytics tool), or for a long time (it is what the business is!) - rarely somewhere in the middle.
+* Long term adoption - most operations data remains as the dataset for a long time. Data is either used for a very short amount of time (in which case you won't be considering something like this and should probably use the in built analytics tool), or for a long time (it is what the business is!) - rarely somewhere in the middle. Examples - calls in call centre, or balls in cricket.
 * Can take a while to build, but maintenance is easier. Time spent maintaining something will outweigh time spent building.
 * If stakeholders are expected to make data-driven decisions, the tooling should help them build data literacy. You also want stakeholders to take a strong interest in the data, even if they don't have a specific question to answer, because this will make them ask more data driven questions in the future.
 * New work often isn't used - it is better to build upon things that are being used (generally and this can be applied to dashboards)
@@ -48,3 +48,16 @@ Section 8 - The foundation = data model quality
 * Timely
 * Consistent dimensions
 
+Extra thoughts:
+* If I was to create a plug in and play tool, how would you load in the data model? Which columns can you filter/group by?
+  * You need to specify what is the time column (for first two plots)
+  * There will be a few time selections based upon this: select start date, select end date, select start time, select end time, select days of week.
+  * Filter/group/facet by any column that is not the ID/primary index, and also not the chosen time column. For different column types, this is how the filter/group/facet works:
+    * you should bbe able to group by the chosen time column in som way - such as day of the week, week, month, year, quarter, hour of day, 15 mins.
+    * numeric columns, you pick the values between which you want (automatically exclude NAs when choosing to filter by a certain column value). For group by/facet, you need to enter the multiple to round to (if the transformation is more complex than this then it should be done in the transformation into view in db).
+    * timestamp (different to the specified time column by the user) works in the same way as numeric for filtering. And for grouping/filtering, it should round to one of the chosen time periods mentioned above.
+    * string/factor is by selecting the values you want to filter to, and group by/facet is by all its possible values (ordered alphabetically for string, natural order for factor)
+    * logical is just a tick box of if you want it to be or not to be equal to a certain value.
+  * Could work on making good connectors from popular DBs, so that dashboard quickly populates for the right DB.
+  * Data from dashboard should probably be reading from a view of the actual data table (view because you probably want to add some custom fields for dashboard use but that are a duplicate and could cause confusion to someone working on the dashboard)
+  * Might need to think a bit more about how to do grouping and faceting for time period plot - what is the metric that you are interested in, and how is that defined? I probably want to define this by looking at a few examples from my current dashboard.
