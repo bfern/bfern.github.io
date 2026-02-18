@@ -1,21 +1,50 @@
 ---
-title: Should we make dashboards more general purpose?
+title: The Case for General-Purpose Analytics Dashboard
 date: "2026-02-04"
-categories: [visualisation, work chat]
+categories: [visualisation, analytics strategy]
 ---
 
-Structure:
-1. Should we have more general purpose dashboards? What are the advantages?
-  * Finding things is easier with one rather than which dashboard is it - generally things shouldn't be nested too deep
-  * Stakeholders (and generally people in knowledge work) should be data savvy enough to find what they need.
-  * new work often isn't used - it is better to build onto things that are already being used (generally and this can be applied to dashboards)
-2. What should they look like?
-  * See my post it note, and use that to explain the design.
-  * if people want something that drills down more then this, then they should have read analytics to the data warehouse and learn SQL (and views).
-3. What would they be built with?
-  * Use Shiny, and see my other blog post about what roles should be hired inside a data team.
-4. Other points to include:
-  * Important to consider who your audience is. If they are high up, then they will usually just want to see KPIs, but if they are lower down then they will usually want to drill into the insights. Thinking about this more generally, you are either using the numbers for reporting purposes, or you are making data driven decisions - these are the main two purposes.
-  * Take a look at some other resources before posting: https://medium.com/@designmatch/exploring-the-best-dashboards-design-a-practical-guide-0995ded5f77b
+Section 1 - Set the problem
+* How do you find the right dashboard for the problem?
+* Duplication of logic (and writing logic more often) => more likely for errors to creep in due to sheerly doing things more often or for fatigue. Getting the logic right is so important => get this wrong then you have people making decisions based on the wrong information, and/or lots of time in the future spent answering questions.
 
+Section 2 - How to solve this
+* Make dashboards more general purpose
+* Generally the idea is to build a new dashboard for a new question - instead it should be to build upon the general purpose dashboard for a new question
+
+Section 3 - Advantages of this (aside from those stated above)
+* Long term adoption - most operations data remains as the dataset for a long time. Data is either used for a very short amount of time (in which case you won't be considering something like this and should probably use the in built analytics tool), or for a long time (it is what the business is!) - rarely somewhere in the middle.
+* Can take a while to build, but maintenance is easier. Time spent maintaining something will outweigh time spent building.
+* If stakeholders are expected to make data-driven decisions, the tooling should help them build data literacy. You also want stakeholders to take a strong interest in the data, even if they don't have a specific question to answer, because this will make them ask more data driven questions in the future.
+* New work often isn't used - it is better to build upon things that are being used (generally and this can be applied to dashboards)
+* Most analytical data is being stored in a large, columnal way these days - lends itself well to a dashboard being built off the dataset.
+
+Section 4 - What a good general-purpose dashboard looks like
+* Three tabs for three core analytical questions: time series tab (how is this changing time?), period performance tab (what does typical behaviour look like?) and aggregate tab (What is the overall perforance?)
+* Some more info about the three tabs:
+  * One is a line plot with the x axis being time, the y axis being the chosen metric. You can choose to decide what time interval you want this by, which variables you want filtered to certain values, if you want the lines to be grouped by a specific variable (or combination of variables), if you want faceting (multiple graphs). There is also a table that shows this data, with an export to CSV option.
+  * A tab which displays data over a specified period of time (e.g. 24 hours). This allows you to see how the product performs over different amounts of time.
+  * A tab which displays the metric values for the whole time period. This is a bar plot (can simply be one bar if no grouping), and the value
+
+Section 5 - When dashboards are NOT enough -  use SQL instead
+* If this doesn't do what you want to do, then you should learn and use SQL instead and use views instead, rather than having a niche dashboard built for something. At some level of complexity, dashboards stop being the right interface.
+
+Section 6 - Which tool to use?
+* Structure: (a) pricniples for choosing a tool, (b) why I use shiny
+* Use Shiny and see my other blog post about what people should be hired within a data team.
+* Reasons for using shiny (or reasons to take into account when choosing the right tool):
+  * Most important is the metric logic. This should be owned centrally by analysts because it is so important, rather than individual teams creating their own metrics which may not align. By writing this in code, you can write it flexibly (in the way you want) and only need to define it once and can be used across the app. Other benefits: version control is natural, testing is possible. For something so critical, that is why writing it in code is best. Metric thought and leadership should be in the analytics team too - rather than at an operational level. Because: there will be inevitable be people who work across ops and see different values for the appararent same metric, analytics team is closer to the data and aware of limitations of writing a metric in a certain logical way, and metrics/KPIs should come from a non biased source which can decide whether or not things are doing well - rather than an ops team that may be focused at hitting targets.
+  * Whilst build stage could take a while - if there is a template then it won't. And as I said before, maintenace is the most important. Looking at maintenance:
+    * Using a software development approach is the best way to maintain because it allows you to debug easily
+  * Need to be able to filter, group and facet in a complex (or should I say specific, or maybe deep) way, flexibly and dynamically
+  * Strong reliance upon the data having the correct types for a tabular data model.
+  * See my other blog post about the roles that should be hired inside a data team, and how this fits with that.
+
+Section 7 - Who is the audience?
+* Generally, users either want to see a metric for reporting, or for making data driven decisions. Higher up (executives) is usually reporting, where they will require KPIs to check that the business is moving in the right direction. This is probably the wrong dashboard for them - a tailor made KPI dashboard is right for them. However, for those who are making data driven decisions, this is perfect.
+
+Section 8 - The foundation = data model quality
+* Accurate
+* Timely
+* Consistent dimensions
 
