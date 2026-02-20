@@ -61,3 +61,5 @@ Extra thoughts:
   * Could work on making good connectors from popular DBs, so that dashboard quickly populates for the right DB.
   * Data from dashboard should probably be reading from a view of the actual data table (view because you probably want to add some custom fields for dashboard use but that are a duplicate and could cause confusion to someone working on the dashboard)
   * Might need to think a bit more about how to do grouping and faceting for time period plot - what is the metric that you are interested in, and how is that defined? I probably want to define this by looking at a few examples from my current dashboard.
+  * With a dataset wiht lots of columns this style of dashboard could be confusing - so analysts who build the dashboard can choose which columns that you can filter/facet by
+  * The future = with a template dashboard, less for analysts to create them - more need for peole to focus on the data (where business logic which varies is needed0 and operational people to make decisions)
