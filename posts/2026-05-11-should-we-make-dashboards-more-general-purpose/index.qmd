@@ -2,6 +2,7 @@
 title: The Case for General-Purpose Analytics Dashboards
 date: "2026-05-11"
 categories: [visualisation, analytics strategy]
+image: thumbnail.jpg
 ---
 
 Suppose you want to find out the answer to an analytics question at your company. You know someone has created a dashboard for this before, but how do you find this amongst the maze of dashboards, especially if this isn't a question that you are frequently looking at? That's not the only problem with having a sea of dashboards. Each dashboard requires business logic to be written afresh, usually which is duplicated elsewhere. Often this logic inside the dashboard isn't reviewed before it is made available to stakeholders, meaning that there is a high chance that the logic is wrong even if it is simple because of dashboard creation fatigue. Getting this business logic right is critical - if you get this wrong then you have people making decisions based on the wrong information, and/or lots of time in the future spent answering questions from confused users.
