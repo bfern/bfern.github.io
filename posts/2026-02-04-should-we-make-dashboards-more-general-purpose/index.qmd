@@ -10,7 +10,7 @@ You might see this as an issue, but think what can we do - we have many differen
 
 * The operations data that you are analysing usually falls into one of two buckets: either being used for a long time (the whole business lifetime usually) or a very short time (for a specific one off task/project). General purpose dashboards are for the former. In this case, since this is used for such a long period of time it means that getting the business logic right is the most important thing.
 * It can take longer to add new features to a general purpose dashboard compared to creating a new dashboard, but the maintenance time will be lower and the time spent maintaining will outweigh the time spent building.
-* Stakeholders who use dashboards will be using them to make data-driven decisions, which means that they should have strong data literacy skills. A dashboard that doesn't immediately show them the answer means that they will be forced to have good data literacy skills. This will also increase their interest in the range of analytics available. This is important even if they don't have a specific question to answer, because this will mean that they will ask more data driven questions in the future.
+* Stakeholders who use dashboards will be using them to make data-driven decisions, which means that they should have strong data literacy skills. A dashboard that doesn't immediately show them the answer means that they will be forced to have these data literacy skills. This will also increase their interest in the range of analytics available. This is important even if they don't have a specific question to answer, because this will mean that they will ask more data driven questions in the future.
 * New work often isn't used - it is better to build upon things that are being used (generally and this can be applied to dashboards).
 * Most analytical data is being stored in a large, columnal way these days which lends itself well to a dashboard being built off the dataset.
 
@@ -18,7 +18,7 @@ You might see this as an issue, but think what can we do - we have many differen
 
 Your general-purpose analytics dashboard should have three tabs for the each of the core types of analytical questions:
 
-1. Time series tab (how is this changing time?)
+1. Time series tab (how is this changing over time?)
 2. Period performance tab (what does typical behaviour look like?)
 3. Aggregate tab (What is the overall performance?)
 
@@ -45,7 +45,7 @@ To answer let's think what we want from the tool:
 
 * The most important thing is the metric logic. This should be owned centrally by analysts because it is so important, rather than individual teams creating their own metrics which may not align. In my opinion this should also be written in code, because you can then write it flexibly (allowing you to define a metric in whatever way and as complex as you'd like) and it only needs to be defined once and can be used across the app. Other benefits of writing it in code are that version control is natural, and testing is possible. Given how critical decisions can be made based on these metrics, I strongly believe that writing it in code is best.
 * Maintaining the app is more important than the initial build, which is another reason to use software development practices.
-* You must be able to store the tabular data for the dashboard with types for each column set.
+* You must be able to store the tabular data for the dashboard with the ability to define column types.
 * Need to have the ability to filter, group and facet the data deeply, flexibly and dynamically.
 
 As an R fanatic I am aware that I am biased, but I would highly recommend using the amazing Shiny library for this.
