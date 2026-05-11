@@ -1,0 +1,59 @@
+---
+title: The Case for General-Purpose Analytics Dashboards
+date: "2026-05-11"
+categories: [visualisation, analytics strategy]
+---
+
+Suppose you want to find out the answer to an analytics question at your company. You know someone has created a dashboard for this before, but how do you find this amongst the maze of dashboards, especially if this isn't a question that you are frequently looking at? That's not the only problem with having a sea of dashboards. Each dashboard requires business logic to be written afresh, usually which is duplicated elsewhere. Often this logic inside the dashboard isn't reviewed before it is made available to stakeholders, meaning that there is a high chance that the logic is wrong even if it is simple because of dashboard creation fatigue. Getting this business logic right is critical - if you get this wrong then you have people making decisions based on the wrong information, and/or lots of time in the future spent answering questions from confused users.
+
+You might see this as an issue, but think what can we do - we have many different metrics that we want to track, over different slices of our data. The answer is not to build a new dashboard for each new question, but instead create a general purpose dashboard that you build upon for each new question. The advantages of doing this are as follows:
+
+* The operations data that you are analysing usually falls into one of two buckets: either being used for a long time (the whole business lifetime usually) or a very short time (for a specific one off task/project). General purpose dashboards are for the former. In this case, since this is used for such a long period of time it means that getting the business logic right is the most important thing.
+* It can take longer to add new features to a general purpose dashboard compared to creating a new dashboard, but the maintenance time will be lower and the time spent maintaining will outweigh the time spent building.
+* Stakeholders who use dashboards will be using them to make data-driven decisions, which means that they should have strong data literacy skills. A dashboard that doesn't immediately show them the answer means that they will be forced to have these data literacy skills. This will also increase their interest in the range of analytics available. This is important even if they don't have a specific question to answer, because this will mean that they will ask more data driven questions in the future.
+* New work often isn't used - it is better to build upon things that are being used (generally and this can be applied to dashboards).
+* Most analytical data is being stored in a large, columnal way these days which lends itself well to a dashboard being built off the dataset.
+
+## What does a good general-purpose analytics dashboard look like?
+
+Your general-purpose analytics dashboard should have three tabs for the each of the core types of analytical questions:
+
+1. Time series tab (how is this changing over time?)
+2. Period performance tab (what does typical behaviour look like?)
+3. Aggregate tab (What is the overall performance?)
+
+#### Time series tab
+
+This tab is used to answer questions about how has metric X changed over time. You choose your metric, your start and end timestamp, what time interval you are grouping your data by (e.g. hour, day, month), what variables you want filtered to certain values, if you want different lines for different groups (which can be a single variable or a combination of variables) and if you want faceting (multiple graphs for different slices of the data). There is also a table that shows this data, with an export to CSV option.
+
+#### Period performance tab
+
+This tab is used to answer questions about what does typical behaviour look like, for example how are users of a particular service distributed over a week?
+
+This would again be a line plot, however instead of the x axis spanning the whole dataset it should only span the period length (a week in this example). You can again specify how frequently you want a new data point, what variables you want filtered to certain values, if you want different lines for different groups and if you want faceting. And again, there should be a table with an export to CSV option.
+
+#### Aggregate tab
+
+This tab is used to answer questions about what is the overall performance rather than how things change over time. For example how many users have used a particular service in total? This is a bar plot rather than a line plot, however you can still filter and group the data like before.
+
+
+You might be thinking that this is all overly simplistic, and this framework won't answer all the questions that you have. And you are right - there will be some analytics that won't fit into this framework. However, I have found that these questions are mostly asked by stakeholders who are already making data driven decisions, and therefore they are often already quite data literate. For these stakeholders, I recommend them to use SQL instead and use views (the analyst can write and give them the view) instead of a dashboard.
+
+## Which tool to use?
+
+To answer let's think what we want from the tool:
+
+* The most important thing is the metric logic. This should be owned centrally by analysts because it is so important, rather than individual teams creating their own metrics which may not align. In my opinion this should also be written in code, because you can then write it flexibly (allowing you to define a metric in whatever way and as complex as you'd like) and it only needs to be defined once and can be used across the app. Other benefits of writing it in code are that version control is natural, and testing is possible. Given how critical decisions can be made based on these metrics, I strongly believe that writing it in code is best.
+* Maintaining the app is more important than the initial build, which is another reason to use software development practices.
+* You must be able to store the tabular data for the dashboard with the ability to define column types.
+* Need to have the ability to filter, group and facet the data deeply, flexibly and dynamically.
+
+As an R fanatic I am aware that I am biased, but I would highly recommend using the amazing Shiny library for this.
+
+## Conclusion
+
+There you have it - the case for general-purpose analytics dashboards. Hopefully I've made a strong enough case to convince you to move your business away from the maze (and probably mess) of hundreds of PowerBI apps towards general-purpose dashboards.
+
+However I am not saying that you should just have one dashboard and use this for everything. As I've already said, if you require a quick dashboard for a one off task, then use whichever tool you find quickest to do this task. For different datasets too, it makes sense to build a different dashboard. And if a user is using the dashboard for reporting rather than data driven decisions (such as they need to see the performance in the last quarter), then a tailor made KPI dashboard where they can see the metrics that they require quickly is probably better for them.
+
+The foundation to all of this is data quality, which is so often neglected. If the data is not accurate, timely or missing dimensions, then no dashboards will be able to save you from making decisions based on the wrong information.
