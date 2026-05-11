@@ -1,6 +1,6 @@
 ---
 title: The Case for General-Purpose Analytics Dashboards
-date: "2026-04-29"
+date: "2026-05-11"
 categories: [visualisation, analytics strategy]
 ---
 
